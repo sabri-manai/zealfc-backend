@@ -13,9 +13,10 @@ app.use(cors());
 
 AWS.config.update({
   region: process.env.AWS_REGION,
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  accessKeyId: process.env.MY_ACCESS_KEY_ID,
+  secretAccessKey: process.env.MY_SECRET_ACCESS_KEY,
 });
+
 
 const cognito = new AWS.CognitoIdentityServiceProvider();
 
