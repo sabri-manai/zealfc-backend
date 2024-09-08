@@ -85,6 +85,9 @@ app.post("/login", async (req, res) => {
     res.status(400).send({ error: error.message });
   }
 });
+app.get("/", (req, res) => {
+  res.send("Backend is working!");
+});
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
