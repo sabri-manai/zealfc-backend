@@ -11,6 +11,8 @@ const authRoutes = require("./routes/auth");
 const adminRoutes = require("./routes/admin");
 const profileRoutes = require("./routes/profile");
 const adminProfileRoutes = require("./routes/adminProfile");
+const gameRoutes = require('./routes/game');
+
 
 app.use(bodyParser.json());
 app.use(cors());
@@ -25,6 +27,7 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use("/profile", profileRoutes);
 app.use("/adminProfile", adminProfileRoutes);
+app.use('/game', gameRoutes);
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
