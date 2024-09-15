@@ -8,7 +8,9 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 const authRoutes = require("./routes/auth");
+const adminRoutes = require("./routes/admin");
 const profileRoutes = require("./routes/profile");
+const adminProfileRoutes = require("./routes/adminProfile");
 
 app.use(bodyParser.json());
 app.use(cors());
@@ -20,7 +22,9 @@ mongoose.connect(process.env.MONGO_URI)
 
 // Routes
 app.use("/auth", authRoutes);
+app.use("/admin", adminRoutes);
 app.use("/profile", profileRoutes);
+app.use("/adminProfile", adminProfileRoutes);
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
