@@ -27,4 +27,19 @@ exports.createGame = async (req, res) => {
   }
 };
 
+
+
+// Fetch all games (public route)
+exports.getAllGames = async (req, res) => {
+  try {
+    const games = await Game.find(); // Fetch all games from the database
+    res.status(200).json(games);
+  } catch (error) {
+    console.error('Error fetching games:', error);
+    res.status(500).json({ error: 'Server error while fetching games.' });
+  }
+};
+
+
+
 // Other controller functions for game management can go here

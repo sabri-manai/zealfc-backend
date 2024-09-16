@@ -27,7 +27,7 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use("/profile", profileRoutes);
 app.use("/adminProfile", adminProfileRoutes);
-app.use('/game', gameRoutes);
+app.use('/games', gameRoutes);
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
