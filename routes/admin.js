@@ -18,4 +18,7 @@ router.post("/confirm", adminController.confirm);
 // In adminRoutes.js
 router.post("/resend-confirmation", adminController.resendConfirmation);
 
+//refresh token route
+router.post("/refresh-token", adminController.refreshToken);
+
 module.exports = router;

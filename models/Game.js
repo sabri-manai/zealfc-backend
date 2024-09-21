@@ -2,7 +2,15 @@ const mongoose = require('mongoose');
 
 const GameSchema = new mongoose.Schema({
   teams: {
-    type: [[String]], // Nested arrays: each team is an array of player names
+    type: [[{
+      first_name: { type: String, required: true },
+      last_name: { type: String, required: true },
+      email: { type: String, required: true },
+      position: { type: String, default: "Unknown" },
+      yellow_cards: { type: Number, default: 0 },
+      red_cards: { type: Number, default: 0 },
+      goals: { type: Number, default: 0 },
+    }]], // Store full user objects in the teams array
     validate: {
       validator: function (val) {
         return val.length === 2; // Ensure there are exactly 2 teams
@@ -34,6 +42,5 @@ const GameSchema = new mongoose.Schema({
     required: true,
   }
 });
-
 
 module.exports = mongoose.model('Game', GameSchema);

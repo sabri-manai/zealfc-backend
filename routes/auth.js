@@ -11,4 +11,8 @@ router.post("/login", authController.login);
 // Confirm profile route
 router.post("/confirm", authController.confirm);
 
+//refresh token route
+router.post("/refresh-token", authController.refreshToken);
+
+
 module.exports = router;

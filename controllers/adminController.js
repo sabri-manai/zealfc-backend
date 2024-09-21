@@ -221,3 +221,35 @@ exports.resendConfirmation = async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 };
+
+// New function for handling refresh token
+exports.refreshToken = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({ error: "Refresh token is required." });
+  }
+
+  const params = {
+    AuthFlow: "REFRESH_TOKEN_AUTH",
+    ClientId: process.env.CLIENT_ID,
+    AuthParameters: {
+      REFRESH_TOKEN: refreshToken,
+    },
+  };
+
+  try {
+    const command = new InitiateAuthCommand(params);
+    const response = await cognitoClient.send(command);
+
+    const { IdToken, AccessToken } = response.AuthenticationResult;
+
+    res.status(200).send({
+      idToken: IdToken,
+      accessToken: AccessToken,
+    });
+  } catch (error) {
+    res.status(400).json({ error: "Failed to refresh token" });
+  }
+};
+    
