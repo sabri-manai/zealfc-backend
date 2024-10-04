@@ -2,6 +2,7 @@ const Game = require('../models/Game');
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const jwksClient = require('jwks-rsa');
+const mongoose = require('mongoose'); 
 
 // Configure JWKS client
 const client = jwksClient({
@@ -165,5 +166,26 @@ exports.signupForGame = async (req, res) => {
       return res.status(500).json({ error: 'Server error' });
     }
   });
+};
+
+// Fetch a specific game by ID (public route)
+exports.getGameById = async (req, res) => {
+  const { gameId } = req.params;
+
+  // Validate the gameId if using MongoDB
+  if (!mongoose.Types.ObjectId.isValid(gameId)) {
+    return res.status(400).json({ error: 'Invalid game ID' });
+  }
+
+  try {
+    const game = await Game.findById(gameId);
+    if (!game) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+    res.status(200).json(game);
+  } catch (error) {
+    console.error('Error fetching game:', error);
+    res.status(500).json({ error: 'Server error while fetching the game.' });
+  }
 };
 

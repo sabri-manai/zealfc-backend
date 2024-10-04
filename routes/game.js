@@ -12,6 +12,8 @@ router.get('/', gameController.getAllGames);
 //signup player for a game
 router.post('/signup/:gameId', gameController.signupForGame);
 
+// Route to get a specific game by ID
+router.get('/:gameId', gameController.getGameById);
 
 // Other game-related routes can be added here
 
