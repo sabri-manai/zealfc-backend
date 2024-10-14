@@ -47,3 +47,35 @@ exports.getUserProfile = async (req, res) => {
     }
   });
 };
+
+// Fetch the games the user has played
+exports.getUserGames = async (req, res) => {
+  const token = req.headers.authorization;
+
+  if (!token) {
+    return res.status(401).json({ error: "No token provided" });
+  }
+
+  jwt.verify(token.split(' ')[1], getKey, {}, async (err, decoded) => {
+    if (err) {
+      console.error("Token verification failed:", err);
+      return res.status(401).json({ error: "Token verification failed" });
+    }
+
+    const cognitoUserSub = decoded.sub;
+
+    try {
+      // Fetch the user from the database based on cognitoUserSub
+      const user = await User.findOne({ cognitoUserSub }).populate('games.gameId');
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Return the user's games
+      res.status(200).json(user.games);
+    } catch (error) {
+      console.error("Error fetching user games:", error);
+      res.status(500).json({ error: "Server error while fetching games." });
+    }
+  });
+};
