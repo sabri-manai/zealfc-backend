@@ -75,6 +75,20 @@ const UserSchema = new mongoose.Schema({
       }
     }
   ],
+  subscription: {
+    id: {
+      type: String,
+      default: null,
+    },
+    status: {
+      type: String,
+      default: null,
+    },
+    current_period_end: {
+      type: Date,
+      default: null,
+    },
+  },
   cognitoUserSub: {
     type: String,
     required: true,

@@ -12,6 +12,9 @@ const adminRoutes = require("./routes/admin");
 const profileRoutes = require("./routes/profile");
 const adminProfileRoutes = require("./routes/adminProfile");
 const gameRoutes = require('./routes/game');
+const subscriptionRoutes = require('./routes/subscription')
+
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 
 app.use(bodyParser.json());
@@ -28,6 +31,7 @@ app.use("/admin", adminRoutes);
 app.use("/profile", profileRoutes);
 app.use("/adminProfile", adminProfileRoutes);
 app.use('/games', gameRoutes);
+app.use('/subscription', subscriptionRoutes);
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
