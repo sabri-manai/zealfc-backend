@@ -89,6 +89,10 @@ const UserSchema = new mongoose.Schema({
       default: null,
     },
   },
+  stripeCustomerId: {
+    type: String,
+    default: null,
+  },
   cognitoUserSub: {
     type: String,
     required: true,
