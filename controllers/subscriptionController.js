@@ -6,8 +6,6 @@ const User = require('../models/User'); // Adjust the path as necessary
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 
 
-
-
 async function handleInvoicePaymentSucceeded(event) {
   const invoice = event.data.object;
 

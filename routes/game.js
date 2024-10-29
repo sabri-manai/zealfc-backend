@@ -15,6 +15,9 @@ router.post('/signup/:gameId', gameController.signupForGame);
 // Route to get a specific game by ID
 router.get('/:gameId', gameController.getGameById);
 
+// Cancel signup for a game
+router.post('/cancel-signup/:gameId', gameController.cancelSignupForGame);
+
 // Other game-related routes can be added here
 
 module.exports = router;

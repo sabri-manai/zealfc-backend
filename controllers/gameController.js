@@ -63,6 +63,7 @@ exports.getAllGames = async (req, res) => {
   }
 };
 
+
 exports.signupForGame = async (req, res) => {
   const token = req.headers.authorization;
 
@@ -167,6 +168,99 @@ exports.signupForGame = async (req, res) => {
     }
   });
 };
+
+
+// Cancel signup for a game
+exports.cancelSignupForGame = async (req, res) => {
+  const token = req.headers.authorization;
+
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized: No token provided' });
+  }
+
+  // Verify JWT
+  jwt.verify(token.split(' ')[1], getKey, {}, async (err, decoded) => {
+    if (err) {
+      console.error('Token verification failed:', err);
+      return res.status(401).json({ error: 'Token verification failed' });
+    }
+
+    const cognitoUserSub = decoded.sub; // Extract user ID (sub) from the token
+
+    try {
+      // Retrieve the user based on the Cognito User Sub (user ID)
+      const user = await User.findOne({ cognitoUserSub });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Retrieve the game ID from the request parameters
+      const { gameId } = req.params;
+
+      if (!gameId) {
+        return res.status(400).json({ error: 'No game ID provided' });
+      }
+
+      // Validate the gameId if using MongoDB
+      if (!mongoose.Types.ObjectId.isValid(gameId)) {
+        return res.status(400).json({ error: 'Invalid game ID' });
+      }
+
+      // Find the game
+      const game = await Game.findById(gameId);
+      if (!game) {
+        return res.status(404).json({ error: 'Game not found' });
+      }
+
+      // Remove user from the teams
+      let removed = false;
+
+      // Remove from team 0
+      for (let i = 0; i < game.teams[0].length; i++) {
+        if (game.teams[0][i] && game.teams[0][i].email === user.email) {
+          game.teams[0][i] = null;
+          removed = true;
+          break;
+        }
+      }
+
+      // Remove from team 1 if not found in team 0
+      if (!removed) {
+        for (let i = 0; i < game.teams[1].length; i++) {
+          if (game.teams[1][i] && game.teams[1][i].email === user.email) {
+            game.teams[1][i] = null;
+            removed = true;
+            break;
+          }
+        }
+      }
+
+      if (!removed) {
+        return res.status(400).json({ error: 'User is not signed up for this game.' });
+      }
+
+      // Save the updated game
+      await game.save();
+
+      // Remove the game from the user's games list
+      user.games = user.games.filter(g => !g.gameId.equals(game._id));
+
+      // Decrement the user's games_played field
+      if (user.games_played > 0) {
+        user.games_played -= 1;
+      }
+
+      await user.save();
+
+      // Respond with success
+      res.status(200).json({ message: 'Successfully canceled signup for the game.' });
+    } catch (error) {
+      console.error('Error canceling signup for the game:', error);
+      return res.status(500).json({ error: 'Server error' });
+    }
+  });
+};
+
 
 // Fetch a specific game by ID (public route)
 exports.getGameById = async (req, res) => {

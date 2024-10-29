@@ -1,81 +1,80 @@
+// controllers/profileController.js
+
 const User = require("../models/User"); // Ensure the path is correct
-const jwt = require("jsonwebtoken");
-const jwksClient = require("jwks-rsa");
+// controllers/profileController.js
 
-const client = jwksClient({
-  jwksUri: `https://cognito-idp.${process.env.AWS_REGION}.amazonaws.com/${process.env.USER_POOL_ID}/.well-known/jwks.json`
-});
+// Upload profile picture and save it as a Buffer in MongoDB
+exports.uploadProfilePicture = async (req, res) => {
+  const file = req.file; // The uploaded file
 
-function getKey(header, callback) {
-  client.getSigningKey(header.kid, (err, key) => {
-    if (err) {
-      console.error("Error getting signing key:", err);
-      return callback(err);
-    }
-    
-    const signingKey = key.publicKey || key.rsaPublicKey;
-    callback(null, signingKey);
-  });
-}
-
-exports.getUserProfile = async (req, res) => {
-  const token = req.headers.authorization;
-
-  if (!token) {
-    return res.status(401).json({ error: "No token provided" });
+  if (!file) {
+    console.error('No file uploaded or invalid file type.');
+    return res.status(400).json({ error: 'No file uploaded or invalid file type.' });
   }
 
-  jwt.verify(token.split(' ')[1], getKey, {}, async (err, decoded) => {
-    if (err) {
-      console.error("Token verification failed:", err);
-      return res.status(401).json({ error: "Token verification failed" });
+  const cognitoUserSub = req.user.sub;
+
+  try {
+    const user = await User.findOne({ cognitoUserSub });
+    if (!user) {
+      console.error('User not found.');
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    const cognitoUserSub = decoded.sub;
+    // Save the file buffer directly to MongoDB
+    user.profilePicture = file.buffer;
+    await user.save();
 
-    try {
-      // Fetch the user from the database based on cognitoUserSub
-      const user = await User.findOne({ cognitoUserSub });
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
+    res.status(200).json({
+      profilePictureUrl: `data:${file.mimetype};base64,${file.buffer.toString('base64')}`,
+    });
+  } catch (error) {
+    console.error('Error uploading profile picture:', error);
+    res.status(500).json({ error: 'Server error while uploading profile picture.' });
+  }
+};
 
-      res.status(200).json(user);
-    } catch (error) {
-      console.error("Error fetching user profile:", error);
-      res.status(500).json({ error: "Server error" });
+// Get user profile
+exports.getUserProfile = async (req, res) => {
+  // req.user is available thanks to verifyToken middleware
+  const cognitoUserSub = req.user.sub;
+
+  try {
+    const user = await User.findOne({ cognitoUserSub });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
     }
-  });
+
+    // Convert profile picture to Base64 if it exists
+    const profilePictureUrl = user.profilePicture
+      ? `data:image/png;base64,${user.profilePicture.toString("base64")}`
+      : null;
+
+    // Send user data with profile picture
+    res.status(200).json({ ...user.toObject(), profilePictureUrl });
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    res.status(500).json({ error: "Server error" });
+  }
 };
 
 // Fetch the games the user has played
 exports.getUserGames = async (req, res) => {
-  const token = req.headers.authorization;
+  // req.user is available thanks to verifyToken middleware
+  const cognitoUserSub = req.user.sub;
 
-  if (!token) {
-    return res.status(401).json({ error: "No token provided" });
+  try {
+    // Fetch the user from the database based on cognitoUserSub
+    const user = await User.findOne({ cognitoUserSub }).populate("games.gameId");
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Return the user's games
+    res.status(200).json(user.games);
+  } catch (error) {
+    console.error("Error fetching user games:", error);
+    res.status(500).json({ error: "Server error while fetching games." });
   }
-
-  jwt.verify(token.split(' ')[1], getKey, {}, async (err, decoded) => {
-    if (err) {
-      console.error("Token verification failed:", err);
-      return res.status(401).json({ error: "Token verification failed" });
-    }
-
-    const cognitoUserSub = decoded.sub;
-
-    try {
-      // Fetch the user from the database based on cognitoUserSub
-      const user = await User.findOne({ cognitoUserSub }).populate('games.gameId');
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      // Return the user's games
-      res.status(200).json(user.games);
-    } catch (error) {
-      console.error("Error fetching user games:", error);
-      res.status(500).json({ error: "Server error while fetching games." });
-    }
-  });
 };
+

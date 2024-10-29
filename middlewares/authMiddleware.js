@@ -1,17 +1,16 @@
 // middlewares/authMiddleware.js
-const jwt = require('jsonwebtoken');
-const jwksClient = require('jwks-rsa');
 
-// Configure JWKS client
+const jwt = require("jsonwebtoken");
+const jwksClient = require("jwks-rsa");
+
 const client = jwksClient({
-  jwksUri: `https://cognito-idp.${process.env.ADMIN_AWS_REGION}.amazonaws.com/${process.env.ADMIN_USER_POOL_ID}/.well-known/jwks.json`,
+  jwksUri: `https://cognito-idp.${process.env.AWS_REGION}.amazonaws.com/${process.env.USER_POOL_ID}/.well-known/jwks.json`,
 });
 
-// Helper function to get the signing key
 function getKey(header, callback) {
   client.getSigningKey(header.kid, (err, key) => {
     if (err) {
-      console.error('Error getting signing key:', err);
+      console.error("Error getting signing key:", err);
       return callback(err);
     }
     const signingKey = key.publicKey || key.rsaPublicKey;
@@ -19,22 +18,22 @@ function getKey(header, callback) {
   });
 }
 
-// Middleware to verify JWT token
-exports.verifyToken = (req, res, next) => {
+const verifyToken = (req, res, next) => {
   const token = req.headers.authorization;
 
   if (!token) {
-    return res.status(401).json({ error: 'Unauthorized: No token provided' });
+    return res.status(401).json({ error: "No token provided" });
   }
 
-  // Verify JWT
-  jwt.verify(token.split(' ')[1], getKey, {}, (err, decoded) => {
+  jwt.verify(token.split(" ")[1], getKey, {}, (err, decoded) => {
     if (err) {
-      console.error('Token verification failed:', err);
-      return res.status(401).json({ error: 'Token verification failed' });
+      console.error("Token verification failed:", err);
+      return res.status(401).json({ error: "Token verification failed" });
     }
 
-    req.user = decoded; // Attach decoded token to req.user
+    req.user = decoded;
     next();
   });
 };
+
+module.exports = { verifyToken };
