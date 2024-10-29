@@ -18,7 +18,11 @@ mongoose.connect(process.env.MONGO_URI)
   .catch((error) => console.error("MongoDB connection error:", error));
 
 // Configure CORS
-app.use(cors());
+app.use(cors({
+  origin: "https://zealfc.com", // Add the actual domain here
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
+}));
 
 // Route for handling webhooks (must be before any body parser middleware)
 app.post('/subscription/webhook', express.raw({ type: 'application/json' }), subscriptionController.handleWebhook);
