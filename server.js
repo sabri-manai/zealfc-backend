@@ -19,7 +19,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 // Configure CORS
 app.use(cors({
-  origin: "https://zealfc.com", // Add the actual domain here
+  origin: "https://zealfc.com",
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
 }));
