@@ -19,7 +19,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 // Configure CORS
 app.use(cors({
-  origin: "https://zealfc.com",
+  origin: `${process.env.FRONTEND_URL}`,
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
 }));
@@ -29,6 +29,7 @@ app.post('/subscription/webhook', express.raw({ type: 'application/json' }), sub
 
 // Parse JSON bodies for all other routes
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Import and use other routes
 const authRoutes = require("./routes/auth");
