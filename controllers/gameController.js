@@ -3,6 +3,7 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const jwksClient = require('jwks-rsa');
 const mongoose = require('mongoose'); 
+const { sendEmail } = require('../services/emailService');
 
 // Configure JWKS client
 const client = jwksClient({
@@ -159,6 +160,13 @@ exports.signupForGame = async (req, res) => {
       user.games_played += 1;
 
       await user.save();
+            // Send confirmation email
+      await sendEmail({
+          to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
+          subject: 'Game Signup Confirmation',
+          html: `<p>Hello ${user.first_name},</p><p>You have successfully signed up for the game at <strong>${game.stadium}</strong> on <strong>${new Date(game.date).toLocaleString()}</strong>.</p><p>Thank you for joining!</p><p>Best regards,<br>Your App Team</p>`,
+          text: `Hello ${user.first_name},\n\nYou have successfully signed up for the game at ${game.stadium} on ${new Date(game.date).toLocaleString()}.\n\nThank you for joining!\n\nBest regards,\nYour App Team`
+      });
 
       // Respond with success
       res.status(200).json({ message: 'Signed up for the game successfully' });
@@ -251,6 +259,12 @@ exports.cancelSignupForGame = async (req, res) => {
       }
 
       await user.save();
+      await sendEmail({
+        to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
+        subject: 'Game Cancelation',
+        html: `<p>Hello ${user.first_name},</p><p>You have successfully canceled your registration for the game at <strong>${game.stadium}</strong> on <strong>${new Date(game.date).toLocaleString()}</strong>.</p><p>Thank you !</p><p>Best regards,<br>Zeal Team</p>`,
+        text: `Hello ${user.first_name},\n\nYou have successfully canceled your registration for the game at ${game.stadium} on ${new Date(game.date).toLocaleString()}.\n\nThank you!\n\nBest regards,\nZeal Team`
+    });
 
       // Respond with success
       res.status(200).json({ message: 'Successfully canceled signup for the game.' });
