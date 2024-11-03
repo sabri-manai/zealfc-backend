@@ -17,15 +17,8 @@ const sendEmail = async ({ to, subject, html, text }) => {
     .setHtml(html)
     .setText(text);
 
-//   try {
-//     await mailerSend.email.send(emailParams);
-//     console.log(`Email sent to ${to.email}`);
-//   } catch (error) {
-//     console.error(`Failed to send email to ${to.email}:`, error);
-//   }
     try {
         const response = await mailerSend.email.send(emailParams);
-        console.log(`Email sent to ${to.email}`, response);
     } catch (error) {
         console.error(`Failed to send email to ${to.email}:`, error);
     }
