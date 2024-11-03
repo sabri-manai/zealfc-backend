@@ -38,7 +38,8 @@ const profileRoutes = require("./routes/profile");
 const adminProfileRoutes = require("./routes/adminProfile");
 const gameRoutes = require('./routes/game');
 const stadiumRoutes = require('./routes/stadium');
-const subscriptionRoutes = require('./routes/subscription'); // Import after express.json()
+const subscriptionRoutes = require('./routes/subscription');
+const leaderboardRoutes = require("./routes/leaderboard");
 
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
@@ -46,6 +47,7 @@ app.use("/profile", profileRoutes);
 app.use("/adminProfile", adminProfileRoutes);
 app.use('/games', gameRoutes);
 app.use('/stadiums', stadiumRoutes);
+app.use("/leaderboard", leaderboardRoutes); // Register the route
 
 // Use JSON body parser for subscription routes (excluding webhook)
 app.use('/subscription', subscriptionRoutes);
