@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const stadiumController = require('../controllers/stadiumController');
-const { verifyToken } = require('../middlewares/authMiddleware'); // Adjust the path as needed
+const { verifyToken } = require('../middlewares/authMiddlewareAdmin'); // Adjust the path as needed
 
 // GET all stadiums (public route)
 router.get('/', stadiumController.getAllStadiums);
