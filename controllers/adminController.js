@@ -252,4 +252,13 @@ exports.refreshToken = async (req, res) => {
     res.status(400).json({ error: "Failed to refresh token" });
   }
 };
-    
+
+// Get all admin users (hosts)
+exports.getAllHosts = async (req, res) => {
+  try {
+    const hosts = await Admin.find(); // You may add filters as needed
+    res.status(200).json(hosts);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to retrieve hosts" });
+  }
+};

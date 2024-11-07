@@ -24,40 +24,34 @@ exports.getStadiumById = async (req, res) => {
   }
 };
 
+
 // Create new stadium (protected)
 exports.createStadium = async (req, res) => {
   const {
-    name,
-    address,
-    capacity,
-    manager,
-    phone,
-    email,
-    hosts,
-    price,
-    slots,
-    amenities,
-    type,
-    surface,
+    name, address, capacity, 
+    manager, phone, email, 
+    hosts, slots, amenities, 
+    type, surface,
   } = req.body;
 
-  // Optionally, you can get the user who is creating the stadium
-  const creator = req.user; // Contains the decoded JWT payload
+  // Validate required fields before creating a stadium
+  if (!name || !address || !capacity || !manager || !phone || !email ) {
+    return res.status(400).json({ message: 'All required fields must be provided.' });
+  }
+
+  // Check slot details for each slot in the slots array
+  if (slots && slots.length > 0) {
+    for (const slot of slots) {
+      if (!slot.dayOfWeek || !slot.startTime || !slot.endTime || !slot.startDate || !slot.endDate) {
+        return res.status(400).json({ message: 'All slot fields (dayOfWeek, startTime, endTime, startDate, endDate) are required.' });
+      }
+    }
+  }
 
   const stadium = new Stadium({
-    name,
-    address,
-    capacity,
-    manager,
-    phone,
-    email,
-    hosts,
-    price,
-    slots,
-    amenities,
-    type,
-    surface,
-    createdBy: creator.sub, // You can store the user's Cognito sub if you add this field to your Stadium model
+    name, address, capacity, 
+    manager, phone, email, hosts,
+     slots, amenities, type, surface,
   });
 
   try {

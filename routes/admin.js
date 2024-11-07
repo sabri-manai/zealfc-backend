@@ -21,4 +21,8 @@ router.post("/resend-confirmation", adminController.resendConfirmation);
 //refresh token route
 router.post("/refresh-token", adminController.refreshToken);
 
+// New route to get all admins (hosts)
+router.get("/hosts", adminController.getAllHosts);
+
+
 module.exports = router;
