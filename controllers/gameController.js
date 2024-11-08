@@ -1,4 +1,5 @@
 const Game = require('../models/Game');
+const Stadium = require('../models/Stadium');
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const jwksClient = require('jwks-rsa');
@@ -23,24 +24,39 @@ function getKey(header, callback) {
   });
 }
 
-
-// Create a new game
 exports.createGame = async (req, res) => {
-  const { teams, stadium, host, result, date, duration, type } = req.body;
+  const { stadiumId, host, date, time, duration, type } = req.body;
 
-  if (!teams || !stadium || !host || !date || !duration || !type) {
+  // Validate required fields
+  if (!stadiumId || !host || !date || !time || !duration || !type) {
     return res.status(400).json({ error: 'All required fields must be provided.' });
   }
 
   try {
+    // Parse the date from ISO string
+    const parsedDate = new Date(date);
+
+    // Fetch the stadium object using the provided stadiumId
+    const stadium = await Stadium.findById(stadiumId);
+    if (!stadium) {
+      return res.status(404).json({ error: 'Stadium not found.' });
+    }
+
+    // Calculate team size based on stadium capacity
+    const teamSize = Math.floor(stadium.capacity / 2);
+
+    // Initialize teams with the calculated size
+    const teams = [Array(teamSize).fill(null), Array(teamSize).fill(null)];
+
     const newGame = new Game({
       teams,
-      stadium,
+      stadium: stadium._id,
       host,
-      result,
-      date,
+      date: parsedDate,
+      time,
       duration,
-      type
+      type,
+      status: 'upcoming',
     });
 
     await newGame.save();
@@ -50,7 +66,6 @@ exports.createGame = async (req, res) => {
     res.status(500).json({ error: 'Server error while creating the game.' });
   }
 };
-
 
 
 // Fetch all games (public route)
@@ -297,3 +312,109 @@ exports.getGameById = async (req, res) => {
   }
 };
 
+// Update game status
+exports.updateGameStatus = async (req, res) => {
+  const { gameId } = req.params;
+  const { status } = req.body;
+
+  // Validate the status value
+  if (!['upcoming', 'in progress', 'finished'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status value.' });
+  }
+
+  try {
+    const game = await Game.findById(gameId);
+    if (!game) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    game.status = status;
+    await game.save();
+
+    res.status(200).json({ message: `Game status updated to ${status}.`, game });
+  } catch (error) {
+    console.error('Error updating game status:', error);
+    res.status(500).json({ error: 'Server error while updating game status.' });
+  }
+};
+
+
+// Update player stats
+exports.updatePlayerStats = async (req, res) => {
+  const { gameId } = req.params;
+  const { teamIndex, playerEmail, goals, assists, yellow_cards, red_cards } = req.body;
+
+  if (teamIndex !== 0 && teamIndex !== 1) {
+    return res.status(400).json({ error: 'Invalid team index. Must be 0 or 1.' });
+  }
+
+  try {
+    const game = await Game.findById(gameId);
+    if (!game) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    const player = game.teams[teamIndex].find(p => p.email === playerEmail);
+    if (!player) {
+      return res.status(404).json({ error: 'Player not found in the specified team.' });
+    }
+
+    // Update stats if provided
+    if (goals !== undefined) player.goals += goals;
+    if (assists !== undefined) player.assists += assists;
+    if (yellow_cards !== undefined) player.yellow_cards += yellow_cards;
+    if (red_cards !== undefined) player.red_cards += red_cards;
+
+    await game.save();
+
+    res.status(200).json({ message: 'Player stats updated successfully.', player });
+  } catch (error) {
+    console.error('Error updating player stats:', error);
+    res.status(500).json({ error: 'Server error while updating player stats.' });
+  }
+};
+
+// Aggregate stats after game ends
+exports.aggregateGameStats = async (gameId) => {
+  try {
+    const game = await Game.findById(gameId);
+    if (!game || game.status !== 'finished') {
+      throw new Error('Game not found or not finished.');
+    }
+
+    // Loop through both teams
+    for (const team of game.teams) {
+      for (const playerData of team) {
+        if (playerData) {
+          const user = await User.findOne({ email: playerData.email });
+          if (user) {
+            user.games_played += 1;
+            user.goals += playerData.goals;
+            user.assists += playerData.assists || 0;
+            user.yellow_cards += playerData.yellow_cards;
+            user.red_cards += playerData.red_cards;
+
+            await user.save();
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error aggregating game stats:', error);
+  }
+};
+
+// Fetch upcoming games
+exports.fetchUpcomingGames = async (req, res) => {
+  try {
+    const today = new Date();
+    const games = await Game.find({ date: { $gte: today }, status: 'upcoming' })
+      .populate('stadium') // Populate stadium details
+      .sort({ date: 1, time: 1 });
+
+    res.status(200).json(games);
+  } catch (error) {
+    console.error('Error fetching upcoming games:', error);
+    res.status(500).json({ error: 'Server error while fetching upcoming games.' });
+  }
+};

@@ -32,6 +32,11 @@ const UserSchema = new mongoose.Schema({
     default: 0,
     required: true,
   },
+  assists: { // New field
+    type: Number,
+    default: 0,
+    required: true,
+  },
   credits: { 
     type: Number,
     default: 0,
