@@ -2,7 +2,9 @@ const {
   CognitoIdentityProviderClient, 
   SignUpCommand, 
   ConfirmSignUpCommand, 
-  InitiateAuthCommand 
+  InitiateAuthCommand,
+  ForgotPasswordCommand,
+  ConfirmForgotPasswordCommand,
 } = require("@aws-sdk/client-cognito-identity-provider");
 
 const User = require("../models/User");
@@ -150,4 +152,42 @@ exports.refreshToken = async (req, res) => {
     res.status(400).json({ error: "Failed to refresh token" });
   }
 };
-    
+
+
+// Initiate password reset
+exports.forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  const params = {
+    ClientId: process.env.CLIENT_ID,
+    Username: email,
+  };
+
+  try {
+    const command = new ForgotPasswordCommand(params);
+    await cognitoClient.send(command);
+    res.status(200).json({ message: "Password reset code sent successfully." });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Confirm new password
+exports.resetPassword = async (req, res) => {
+  const { email, confirmationCode, newPassword } = req.body;
+
+  const params = {
+    ClientId: process.env.CLIENT_ID,
+    Username: email,
+    ConfirmationCode: confirmationCode,
+    Password: newPassword,
+  };
+
+  try {
+    const command = new ConfirmForgotPasswordCommand(params);
+    await cognitoClient.send(command);
+    res.status(200).json({ message: "Password has been reset successfully." });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
