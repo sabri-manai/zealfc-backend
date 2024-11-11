@@ -1,6 +1,8 @@
 const Game = require('../models/Game');
 const Stadium = require('../models/Stadium');
 const User = require('../models/User');
+const Admin = require('../models/Admin');
+
 const jwt = require('jsonwebtoken');
 const jwksClient = require('jwks-rsa');
 const mongoose = require('mongoose'); 
@@ -24,35 +26,39 @@ function getKey(header, callback) {
   });
 }
 
+
+// controllers/gameController.js
 exports.createGame = async (req, res) => {
-  const { stadiumId, host, date, time, duration, type } = req.body;
+  const { stadiumId, hostId, date, time, duration, type } = req.body;
 
   // Validate required fields
-  if (!stadiumId || !host || !date || !time || !duration || !type) {
+  if (!stadiumId || !hostId || !date || !time || !duration || !type) {
     return res.status(400).json({ error: 'All required fields must be provided.' });
   }
 
   try {
-    // Parse the date from ISO string
-    const parsedDate = new Date(date);
-
-    // Fetch the stadium object using the provided stadiumId
-    const stadium = await Stadium.findById(stadiumId);
+    const stadium = await Stadium.findById(stadiumId).lean();
     if (!stadium) {
       return res.status(404).json({ error: 'Stadium not found.' });
     }
 
-    // Calculate team size based on stadium capacity
-    const teamSize = Math.floor(stadium.capacity / 2);
+    const host = await Admin.findById(hostId)
+      .select('-cognitoUserSub -role -permissions -createdAt')
+      .lean();
+    if (!host) {
+      return res.status(404).json({ error: 'Host not found.' });
+    }
 
-    // Initialize teams with the calculated size
+    // Initialize teams
+    const teamSize = Math.floor(stadium.capacity / 2);
     const teams = [Array(teamSize).fill(null), Array(teamSize).fill(null)];
 
+    // Create a new game with embedded stadium and host data
     const newGame = new Game({
       teams,
-      stadium: stadium._id,
-      host,
-      date: parsedDate,
+      stadium,
+      host, // Use 'host' instead of 'hosts'
+      date: new Date(date),
       time,
       duration,
       type,
@@ -179,8 +185,8 @@ exports.signupForGame = async (req, res) => {
       await sendEmail({
           to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
           subject: 'Game Signup Confirmation',
-          html: `<p>Hello ${user.first_name},</p><p>You have successfully signed up for the game at <strong>${game.stadium}</strong> on <strong>${new Date(game.date).toLocaleString()}</strong>.</p><p>Thank you for joining!</p><p>Best regards,<br>Your App Team</p>`,
-          text: `Hello ${user.first_name},\n\nYou have successfully signed up for the game at ${game.stadium} on ${new Date(game.date).toLocaleString()}.\n\nThank you for joining!\n\nBest regards,\nYour App Team`
+          html: `<p>Hello ${user.first_name},</p><p>You have successfully signed up for the game at <strong>${game.stadium.name}</strong> on <strong>${new Date(game.date).toLocaleString()}</strong>.</p><p>Thank you for joining!</p><p>Best regards,<br>Your App Team</p>`,
+          text: `Hello ${user.first_name},\n\nYou have successfully signed up for the game at ${game.stadium.name} on ${new Date(game.date).toLocaleString()}.\n\nThank you for joining!\n\nBest regards,\nYour App Team`
       });
 
       // Respond with success
@@ -277,8 +283,8 @@ exports.cancelSignupForGame = async (req, res) => {
       await sendEmail({
         to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
         subject: 'Game Cancelation',
-        html: `<p>Hello ${user.first_name},</p><p>You have successfully canceled your registration for the game at <strong>${game.stadium}</strong> on <strong>${new Date(game.date).toLocaleString()}</strong>.</p><p>Thank you !</p><p>Best regards,<br>Zeal Team</p>`,
-        text: `Hello ${user.first_name},\n\nYou have successfully canceled your registration for the game at ${game.stadium} on ${new Date(game.date).toLocaleString()}.\n\nThank you!\n\nBest regards,\nZeal Team`
+        html: `<p>Hello ${user.first_name},</p><p>You have successfully canceled your registration for the game at <strong>${game.stadium.name}</strong> on <strong>${new Date(game.date).toLocaleString()}</strong>.</p><p>Thank you !</p><p>Best regards,<br>Zeal Team</p>`,
+        text: `Hello ${user.first_name},\n\nYou have successfully canceled your registration for the game at ${game.stadium.name} on ${new Date(game.date).toLocaleString()}.\n\nThank you!\n\nBest regards,\nZeal Team`
     });
 
       // Respond with success

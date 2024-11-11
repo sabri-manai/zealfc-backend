@@ -1,6 +1,9 @@
+// src/models/Game.js
+
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
+// Define the PlayerSchema
 const PlayerSchema = new mongoose.Schema({
   first_name: { type: String, required: true },
   last_name: { type: String, required: true },
@@ -9,28 +12,48 @@ const PlayerSchema = new mongoose.Schema({
   yellow_cards: { type: Number, default: 0 },
   red_cards: { type: Number, default: 0 },
   goals: { type: Number, default: 0 },
-  assists: { type: Number, default: 0 }, // Add assists field
+  assists: { type: Number, default: 0 },
+});
+
+// Define the HostSchema
+const HostSchema = new mongoose.Schema({
+  _id: { type: mongoose.Schema.Types.ObjectId, required: true },
+  email: { type: String, required: true },
+  first_name: { type: String, required: true },
+  last_name: { type: String, required: true },
+  phone_number: { type: String, required: true },
+});
+
+// Define the StadiumSchema
+const StadiumSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  capacity: { type: Number, required: true },
+  address: { type: String, required: true },
+  image: { type: String },
+  hosts: [{ type: HostSchema }], // Updated hosts field
+  slots: [
+    {
+      startTime: { type: String },
+      endTime: { type: String },
+    },
+  ],
 });
 
 const GameSchema = new mongoose.Schema({
   teams: {
-    type: [[PlayerSchema]], // Use the PlayerSchema for players
+    type: [[PlayerSchema]],
     validate: {
       validator: function (val) {
-        return val.length === 2; // Ensure there are exactly 2 teams
+        return val.length === 2;
       },
       message: '{PATH} must have exactly 2 teams',
     },
   },
   stadium: {
-    type: Schema.Types.ObjectId,
-    ref: 'Stadium',
+    type: StadiumSchema,
     required: true,
   },
-  host: {
-    type: String,
-    required: true,
-  },
+  host: { type: HostSchema, required: true }, // Single host for the game
   result: {
     type: String,
   },
@@ -38,7 +61,7 @@ const GameSchema = new mongoose.Schema({
     type: Date,
     required: true,
   },
-  time: { // New field
+  time: {
     type: String,
     required: true,
   },
@@ -50,7 +73,7 @@ const GameSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  status: { // New field
+  status: {
     type: String,
     enum: ['upcoming', 'in progress', 'finished'],
     default: 'upcoming',
