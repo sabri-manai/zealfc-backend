@@ -19,6 +19,10 @@ router.post('/signup/:gameId', gameController.signupForGame);
 // Cancel signup for a game
 router.post('/cancel-signup/:gameId', gameController.cancelSignupForGame);
 
+router.post('/waitlist/:gameId', gameController.joinWaitlist);
+
+router.delete('/waitlist/:gameId', gameController.leaveWaitlist);
+
 // Update game status
 router.patch('/:gameId/status', gameController.updateGameStatus);
 
@@ -27,6 +31,7 @@ router.patch('/:gameId/player-stats', gameController.updatePlayerStats);
 
 // Route to get a specific game by ID (should be last)
 router.get('/:gameId', gameController.getGameById);
+
 
 // Other game-related routes can be added here
 

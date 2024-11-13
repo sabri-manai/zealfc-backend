@@ -79,6 +79,8 @@ const GameSchema = new mongoose.Schema({
     default: 'upcoming',
     required: true,
   },
+  waitlist: [PlayerSchema],
+
 });
 
 module.exports = mongoose.model('Game', GameSchema);

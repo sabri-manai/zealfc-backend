@@ -1,28 +1,30 @@
-// services/emailService.js
 require('dotenv/config');
-const { MailerSend, EmailParams, Sender, Recipient } = require("mailersend");
+const nodemailer = require('nodemailer');
 
-const mailerSend = new MailerSend({
-  apiKey: process.env.MAILERSEND_API_KEY,
+// Create a transporter using Brevo's SMTP
+const transporter = nodemailer.createTransport({
+  host: 'smtp-relay.brevo.com', // Brevo's SMTP server
+  port: 587, // Use 587 for TLS
+  secure: false, // Set to true if using port 465
+  auth: {
+    user: process.env.BREVO_SMTP_LOGIN, // Your Brevo SMTP login
+    pass: process.env.BREVO_SMTP_PASSWORD, // Your Brevo SMTP password
+  },
 });
 
 const sendEmail = async ({ to, subject, html, text }) => {
-  const sentFrom = new Sender(process.env.MAILERSEND_FROM_EMAIL, process.env.MAILERSEND_FROM_NAME);
-  const recipients = [new Recipient(to.email, to.name)];
-
-  const emailParams = new EmailParams()
-    .setFrom(sentFrom)
-    .setTo(recipients)
-    .setSubject(subject)
-    .setHtml(html)
-    .setText(text);
-
-    try {
-        const response = await mailerSend.email.send(emailParams);
-    } catch (error) {
-        console.error(`Failed to send email to ${to.email}:`, error);
-    }
-  
+  try {
+    const info = await transporter.sendMail({
+      from: `"${process.env.MAIL_FROM_NAME}" <${process.env.MAIL_FROM_EMAIL}>`,
+      to: to.email,
+      subject: subject,
+      text: text,
+      html: html,
+    });
+    console.log(`Email sent: ${info.messageId}`);
+  } catch (error) {
+    console.error(`Failed to send email to ${to.email}:`, error);
+  }
 };
 
 module.exports = { sendEmail };

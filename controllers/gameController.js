@@ -93,30 +93,26 @@ exports.signupForGame = async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized: No token provided' });
   }
 
-  // Verify JWT
   jwt.verify(token.split(' ')[1], getKey, {}, async (err, decoded) => {
     if (err) {
       console.error('Token verification failed:', err);
       return res.status(401).json({ error: 'Token verification failed' });
     }
 
-    const cognitoUserSub = decoded.sub; // Extract user ID (sub) from the token
+    const cognitoUserSub = decoded.sub;
 
     try {
-      // Retrieve the user based on the Cognito User Sub (user ID)
       const user = await User.findOne({ cognitoUserSub });
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      // Retrieve the game ID from the request parameters
       const { gameId } = req.params;
 
       if (!gameId) {
         return res.status(400).json({ error: 'No game ID provided' });
       }
 
-      // Find the game
       const game = await Game.findById(gameId);
       if (!game) {
         return res.status(404).json({ error: 'Game not found' });
@@ -139,6 +135,9 @@ exports.signupForGame = async (req, res) => {
       if (isAlreadySignedUp) {
         return res.status(400).json({ error: 'You are already signed up for this game.' });
       }
+
+      // Remove the user from the waitlist if they're on it
+      game.waitlist = game.waitlist.filter(waitlistUser => waitlistUser.email !== user.email);
 
       let assigned = false;
 
@@ -170,23 +169,22 @@ exports.signupForGame = async (req, res) => {
       // Save the updated game
       await game.save();
 
-      // Add the game to the user's list of played games (if this is your user structure)
+      // Add the game to the user's list of played games
       user.games.push({
         gameId: game._id,
         date: game.date,
         stadium: game.stadium
       });
 
-      // Update the user's games_played field
       user.games_played += 1;
-
       await user.save();
-            // Send confirmation email
+
+      // Send confirmation email
       await sendEmail({
-          to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
-          subject: 'Game Signup Confirmation',
-          html: `<p>Hello ${user.first_name},</p><p>You have successfully signed up for the game at <strong>${game.stadium.name}</strong> on <strong>${new Date(game.date).toLocaleString()}</strong>.</p><p>Thank you for joining!</p><p>Best regards,<br>Your App Team</p>`,
-          text: `Hello ${user.first_name},\n\nYou have successfully signed up for the game at ${game.stadium.name} on ${new Date(game.date).toLocaleString()}.\n\nThank you for joining!\n\nBest regards,\nYour App Team`
+        to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
+        subject: 'Game Signup Confirmation',
+        html: `<p>Hello ${user.first_name},</p><p>You have successfully signed up for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>.</p><p>Thank you for joining!</p><p>Best regards,<br>Your App Team</p>`,
+        text: `Hello ${user.first_name},\n\nYou have successfully signed up for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}.\n\nThank you for joining!\n\nBest regards,\nYour App Team`
       });
 
       // Respond with success
@@ -198,7 +196,6 @@ exports.signupForGame = async (req, res) => {
   });
 };
 
-
 // Cancel signup for a game
 exports.cancelSignupForGame = async (req, res) => {
   const token = req.headers.authorization;
@@ -207,44 +204,32 @@ exports.cancelSignupForGame = async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized: No token provided' });
   }
 
-  // Verify JWT
   jwt.verify(token.split(' ')[1], getKey, {}, async (err, decoded) => {
     if (err) {
       console.error('Token verification failed:', err);
       return res.status(401).json({ error: 'Token verification failed' });
     }
 
-    const cognitoUserSub = decoded.sub; // Extract user ID (sub) from the token
+    const cognitoUserSub = decoded.sub;
 
     try {
-      // Retrieve the user based on the Cognito User Sub (user ID)
       const user = await User.findOne({ cognitoUserSub });
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      // Retrieve the game ID from the request parameters
       const { gameId } = req.params;
 
-      if (!gameId) {
-        return res.status(400).json({ error: 'No game ID provided' });
-      }
-
-      // Validate the gameId if using MongoDB
-      if (!mongoose.Types.ObjectId.isValid(gameId)) {
+      if (!gameId || !mongoose.Types.ObjectId.isValid(gameId)) {
         return res.status(400).json({ error: 'Invalid game ID' });
       }
 
-      // Find the game
       const game = await Game.findById(gameId);
       if (!game) {
         return res.status(404).json({ error: 'Game not found' });
       }
 
-      // Remove user from the teams
       let removed = false;
-
-      // Remove from team 0
       for (let i = 0; i < game.teams[0].length; i++) {
         if (game.teams[0][i] && game.teams[0][i].email === user.email) {
           game.teams[0][i] = null;
@@ -253,7 +238,6 @@ exports.cancelSignupForGame = async (req, res) => {
         }
       }
 
-      // Remove from team 1 if not found in team 0
       if (!removed) {
         for (let i = 0; i < game.teams[1].length; i++) {
           if (game.teams[1][i] && game.teams[1][i].email === user.email) {
@@ -268,26 +252,35 @@ exports.cancelSignupForGame = async (req, res) => {
         return res.status(400).json({ error: 'User is not signed up for this game.' });
       }
 
-      // Save the updated game
       await game.save();
 
-      // Remove the game from the user's games list
       user.games = user.games.filter(g => !g.gameId.equals(game._id));
-
-      // Decrement the user's games_played field
       if (user.games_played > 0) {
         user.games_played -= 1;
       }
 
       await user.save();
+
+      // Send cancellation email
       await sendEmail({
         to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
-        subject: 'Game Cancelation',
-        html: `<p>Hello ${user.first_name},</p><p>You have successfully canceled your registration for the game at <strong>${game.stadium.name}</strong> on <strong>${new Date(game.date).toLocaleString()}</strong>.</p><p>Thank you !</p><p>Best regards,<br>Zeal Team</p>`,
-        text: `Hello ${user.first_name},\n\nYou have successfully canceled your registration for the game at ${game.stadium.name} on ${new Date(game.date).toLocaleString()}.\n\nThank you!\n\nBest regards,\nZeal Team`
-    });
+        subject: 'Game Cancellation',
+        html: `<p>Hello ${user.first_name},</p><p>You have successfully canceled your registration for the game at <strong>${game.stadium.name}</strong> on <strong>${(game.date)}</strong>.</p><p>Thank you!</p><p>Best regards,<br>Zeal Team</p>`,
+        text: `Hello ${user.first_name},\n\nYou have successfully canceled your registration for the game at ${game.stadium.name} on ${(game.date)}.\n\nThank you!\n\nBest regards,\nZeal Team`
+      });
 
-      // Respond with success
+      // Notify users in the waitlist
+      if (game.waitlist && game.waitlist.length > 0) {
+        await Promise.all(game.waitlist.map(async (waitlistUser) => {
+          await sendEmail({
+            to: { email: waitlistUser.email, name: `${waitlistUser.first_name} ${waitlistUser.last_name}` },
+            subject: 'Spot Available for Game',
+            html: `<p>Hello ${waitlistUser.first_name},</p><p>A spot has opened up for the game at <strong>${game.stadium.name}</strong> on <strong>${(game.date).toLocaleString()}</strong>.</p><p>Sign up quickly if you wish to join!</p><p>Best regards,<br>Zeal Team</p>`,
+            text: `Hello ${waitlistUser.first_name},\n\nA spot has opened up for the game at ${game.stadium.name} on ${(game.date).toLocaleString()}.\n\nSign up quickly if you wish to join!\n\nBest regards,\nZeal Team`
+          });
+        }));
+      }
+
       res.status(200).json({ message: 'Successfully canceled signup for the game.' });
     } catch (error) {
       console.error('Error canceling signup for the game:', error);
@@ -423,4 +416,104 @@ exports.fetchUpcomingGames = async (req, res) => {
     console.error('Error fetching upcoming games:', error);
     res.status(500).json({ error: 'Server error while fetching upcoming games.' });
   }
+};
+
+// Add user to the waitlist
+exports.joinWaitlist = async (req, res) => {
+  const token = req.headers.authorization;
+
+  jwt.verify(token.split(' ')[1], getKey, {}, async (err, decoded) => {
+    if (err) {
+      return res.status(401).json({ error: 'Token verification failed' });
+    }
+
+    const cognitoUserSub = decoded.sub;
+
+    try {
+      const user = await User.findOne({ cognitoUserSub });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const { gameId } = req.params;
+      const game = await Game.findById(gameId);
+      if (!game) {
+        return res.status(404).json({ error: 'Game not found' });
+      }
+
+      // Check if user is already in teams or waitlist
+      const isAlreadyInGame = game.teams.some(team => team.some(player => player && player.email === user.email)) ||
+                              game.waitlist.some(waitlistUser => waitlistUser.email === user.email);
+
+      if (isAlreadyInGame) {
+        return res.status(400).json({ error: 'You are already signed up for this game or on the waitlist.' });
+      }
+
+      game.waitlist.push({
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+        position: user.position,
+      });
+
+      await game.save();
+
+      // Send confirmation email about waitlist status
+      await sendEmail({
+        to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
+        subject: 'Waitlist Confirmation for Game',
+        html: `<p>Hello ${user.first_name},</p><p>You have been added to the waitlist for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>. You will receive an email if a spot becomes available.</p><p>Best regards,<br>Your App Team</p>`,
+        text: `Hello ${user.first_name},\n\nYou have been added to the waitlist for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time} . You will receive an email if a spot becomes available.\n\nBest regards,\nYour App Team`
+      });
+
+      res.status(200).json({ message: 'You have been added to the waitlist.' });
+    } catch (error) {
+      console.error('Error adding to waitlist:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+};
+
+
+// Remove user from the waitlist
+exports.leaveWaitlist = async (req, res) => {
+  const token = req.headers.authorization;
+
+  jwt.verify(token.split(' ')[1], getKey, {}, async (err, decoded) => {
+    if (err) {
+      return res.status(401).json({ error: 'Token verification failed' });
+    }
+
+    const cognitoUserSub = decoded.sub;
+
+    try {
+      const user = await User.findOne({ cognitoUserSub });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const { gameId } = req.params;
+      const game = await Game.findById(gameId);
+      if (!game) {
+        return res.status(404).json({ error: 'Game not found' });
+      }
+
+      // Remove user from the waitlist
+      game.waitlist = game.waitlist.filter(waitlistUser => waitlistUser.email !== user.email);
+      await game.save();
+
+      // Send confirmation email about leaving the waitlist
+      await sendEmail({
+        to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
+        subject: 'Removed from Waitlist for Game',
+        html: `<p>Hello ${user.first_name},</p><p>You have been removed from the waitlist for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>. You will no longer receive notifications about available spots for this game.</p><p>Best regards,<br>Your App Team</p>`,
+        text: `Hello ${user.first_name},\n\nYou have been removed from the waitlist for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}. You will no longer receive notifications about available spots for this game.\n\nBest regards,\nYour App Team`
+      });
+
+      res.status(200).json({ message: 'You have been removed from the waitlist.' });
+    } catch (error) {
+      console.error('Error removing from waitlist:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
 };
