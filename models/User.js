@@ -1,4 +1,6 @@
-const mongoose = require("mongoose");
+// models/User.js
+
+const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
   first_name: {
@@ -32,19 +34,19 @@ const UserSchema = new mongoose.Schema({
     default: 0,
     required: true,
   },
-  assists: { // New field
+  assists: {
     type: Number,
     default: 0,
     required: true,
   },
-  credits: { 
+  credits: {
     type: Number,
     default: 0,
     required: true,
   },
   position: {
     type: String,
-    default: "Unknown",
+    default: 'Unknown',
     required: true,
   },
   yellow_cards: {
@@ -81,9 +83,24 @@ const UserSchema = new mongoose.Schema({
       stadium: {
         type: String,
         required: true,
-      }
-    }
+      },
+    },
   ],
+  attendance_count: {
+    type: Number,
+    default: 0,
+    required: true,
+  },
+  late_count: {
+    type: Number,
+    default: 0,
+    required: true,
+  },
+  absence_count: {
+    type: Number,
+    default: 0,
+    required: true,
+  },
   subscription: {
     id: {
       type: String,
@@ -105,9 +122,9 @@ const UserSchema = new mongoose.Schema({
   cognitoUserSub: {
     type: String,
     required: true,
-  }
+  },
 });
 
-const User = mongoose.model("User", UserSchema);
+const User = mongoose.model('User', UserSchema);
 
 module.exports = User;

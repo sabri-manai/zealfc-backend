@@ -1,28 +1,35 @@
-const express = require("express");
+// routes/admin.js
+
+const express = require('express');
 const router = express.Router();
-const adminController = require("../controllers/adminController");
+const adminAuthController = require('../controllers/adminController');
+const { authenticateToken } = require('../utils/auth');
 
+// Admin Registration
+router.post('/register', adminAuthController.registerAdmin);
 
-// Admin Login Route
-router.post("/login", adminController.loginAdmin);
+// Admin Login
+router.post('/login', adminAuthController.loginAdmin);
 
-// Admin Login Route
-router.post("/register", adminController.register);
+// Confirm Admin Registration
+router.post('/confirm', adminAuthController.confirmAdminRegistration);
 
-// Handle NEW_PASSWORD_REQUIRED challenge
-router.post("/set-new-password", adminController.setNewPassword);
+// Resend Confirmation Code
+router.post('/resend-confirmation', adminAuthController.resendConfirmationCode);
 
-// Confirm profile route
-router.post("/confirm", adminController.confirm);
+// Refresh Token
+router.post('/refresh-token', adminAuthController.refreshToken);
 
-// In adminRoutes.js
-router.post("/resend-confirmation", adminController.resendConfirmation);
+// Forgot Password
+router.post('/forgot-password', adminAuthController.forgotPassword);
 
-//refresh token route
-router.post("/refresh-token", adminController.refreshToken);
+// Reset Password
+router.post('/reset-password', adminAuthController.resetPassword);
 
-// New route to get all admins (hosts)
-router.get("/hosts", adminController.getAllHosts);
+// Get Admin Profile (Protected Route)
+router.get('/profile', authenticateToken, adminAuthController.getAdminProfile);
 
+// Get All Hosts (Protected Route)
+router.get('/hosts', authenticateToken, adminAuthController.getAllHosts);
 
 module.exports = router;

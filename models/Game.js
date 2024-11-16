@@ -1,18 +1,18 @@
-// src/models/Game.js
+// models/Game.js
 
 const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
 
 // Define the PlayerSchema
 const PlayerSchema = new mongoose.Schema({
   first_name: { type: String, required: true },
   last_name: { type: String, required: true },
   email: { type: String, required: true },
-  position: { type: String, default: "Unknown" },
+  position: { type: String, default: 'Unknown' },
   yellow_cards: { type: Number, default: 0 },
   red_cards: { type: Number, default: 0 },
   goals: { type: Number, default: 0 },
   assists: { type: Number, default: 0 },
+  attendance: { type: String, enum: ['present', 'absent', 'late'], default: 'absent' },
 });
 
 // Define the HostSchema
@@ -30,7 +30,7 @@ const StadiumSchema = new mongoose.Schema({
   capacity: { type: Number, required: true },
   address: { type: String, required: true },
   image: { type: String },
-  hosts: [{ type: HostSchema }], // Updated hosts field
+  hosts: [{ type: HostSchema }],
   slots: [
     {
       startTime: { type: String },
@@ -53,9 +53,15 @@ const GameSchema = new mongoose.Schema({
     type: StadiumSchema,
     required: true,
   },
-  host: { type: HostSchema, required: true }, // Single host for the game
+  host: { type: HostSchema, required: true },
   result: {
-    type: String,
+    team1Goals: { type: Number, default: 0 },
+    team2Goals: { type: Number, default: 0 },
+    outcome: {
+      type: String,
+      enum: ['Team 1 wins', 'Team 2 wins', 'Draw'],
+      default: 'Draw',
+    },
   },
   date: {
     type: Date,
@@ -80,7 +86,6 @@ const GameSchema = new mongoose.Schema({
     required: true,
   },
   waitlist: [PlayerSchema],
-
 });
 
 module.exports = mongoose.model('Game', GameSchema);

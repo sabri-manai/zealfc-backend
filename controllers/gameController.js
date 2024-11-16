@@ -1,33 +1,16 @@
+// controllers/gameController.js
+
 const Game = require('../models/Game');
 const Stadium = require('../models/Stadium');
 const User = require('../models/User');
 const Admin = require('../models/Admin');
-
-const jwt = require('jsonwebtoken');
-const jwksClient = require('jwks-rsa');
-const mongoose = require('mongoose'); 
 const { sendEmail } = require('../services/emailService');
+const mongoose = require('mongoose');
 
-// Configure JWKS client
-const client = jwksClient({
-  jwksUri: `https://cognito-idp.${process.env.AWS_REGION}.amazonaws.com/${process.env.USER_POOL_ID}/.well-known/jwks.json`
-});
+// Import the authenticateToken middleware
+const { authenticateToken } = require('../utils/auth');
 
-// Helper function to get the signing key
-function getKey(header, callback) {
-  client.getSigningKey(header.kid, (err, key) => {
-    if (err) {
-      console.error("Error getting signing key:", err);
-      return callback(err);
-    }
-    
-    const signingKey = key.publicKey || key.rsaPublicKey;
-    callback(null, signingKey);
-  });
-}
-
-
-// controllers/gameController.js
+// Create a new game
 exports.createGame = async (req, res) => {
   const { stadiumId, hostId, date, time, duration, type } = req.body;
 
@@ -57,7 +40,7 @@ exports.createGame = async (req, res) => {
     const newGame = new Game({
       teams,
       stadium,
-      host, // Use 'host' instead of 'hosts'
+      host,
       date: new Date(date),
       time,
       duration,
@@ -73,11 +56,10 @@ exports.createGame = async (req, res) => {
   }
 };
 
-
 // Fetch all games (public route)
 exports.getAllGames = async (req, res) => {
   try {
-    const games = await Game.find(); // Fetch all games from the database
+    const games = await Game.find();
     res.status(200).json(games);
   } catch (error) {
     console.error('Error fetching games:', error);
@@ -85,21 +67,31 @@ exports.getAllGames = async (req, res) => {
   }
 };
 
+// Fetch a specific game by ID (public route)
+exports.getGameById = async (req, res) => {
+  const { gameId } = req.params;
 
-exports.signupForGame = async (req, res) => {
-  const token = req.headers.authorization;
-
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized: No token provided' });
+  if (!mongoose.Types.ObjectId.isValid(gameId)) {
+    return res.status(400).json({ error: 'Invalid game ID' });
   }
 
-  jwt.verify(token.split(' ')[1], getKey, {}, async (err, decoded) => {
-    if (err) {
-      console.error('Token verification failed:', err);
-      return res.status(401).json({ error: 'Token verification failed' });
+  try {
+    const game = await Game.findById(gameId);
+    if (!game) {
+      return res.status(404).json({ error: 'Game not found' });
     }
+    res.status(200).json(game);
+  } catch (error) {
+    console.error('Error fetching game:', error);
+    res.status(500).json({ error: 'Server error while fetching the game.' });
+  }
+};
 
-    const cognitoUserSub = decoded.sub;
+// Signup player for a game
+exports.signupForGame = [
+  authenticateToken,
+  async (req, res) => {
+    const cognitoUserSub = req.user.sub;
 
     try {
       const user = await User.findOne({ cognitoUserSub });
@@ -125,19 +117,20 @@ exports.signupForGame = async (req, res) => {
         position: user.position,
         yellow_cards: user.yellow_cards,
         red_cards: user.red_cards,
-        goals: user.goals
+        goals: user.goals,
       };
 
       // Check if the user is already signed up for this game
-      const isAlreadySignedUp = game.teams[0].some(player => player && player.email === user.email) ||
-                                game.teams[1].some(player => player && player.email === user.email);
+      const isAlreadySignedUp =
+        game.teams[0].some((player) => player && player.email === user.email) ||
+        game.teams[1].some((player) => player && player.email === user.email);
 
       if (isAlreadySignedUp) {
         return res.status(400).json({ error: 'You are already signed up for this game.' });
       }
 
       // Remove the user from the waitlist if they're on it
-      game.waitlist = game.waitlist.filter(waitlistUser => waitlistUser.email !== user.email);
+      game.waitlist = game.waitlist.filter((waitlistUser) => waitlistUser.email !== user.email);
 
       let assigned = false;
 
@@ -169,14 +162,13 @@ exports.signupForGame = async (req, res) => {
       // Save the updated game
       await game.save();
 
-      // Add the game to the user's list of played games
+      // Add the game to the user's list of games
       user.games.push({
         gameId: game._id,
         date: game.date,
-        stadium: game.stadium
+        stadium: game.stadium.name,
       });
 
-      user.games_played += 1;
       await user.save();
 
       // Send confirmation email
@@ -184,33 +176,22 @@ exports.signupForGame = async (req, res) => {
         to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
         subject: 'Game Signup Confirmation',
         html: `<p>Hello ${user.first_name},</p><p>You have successfully signed up for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>.</p><p>Thank you for joining!</p><p>Best regards,<br>Your App Team</p>`,
-        text: `Hello ${user.first_name},\n\nYou have successfully signed up for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}.\n\nThank you for joining!\n\nBest regards,\nYour App Team`
+        text: `Hello ${user.first_name},\n\nYou have successfully signed up for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}.\n\nThank you for joining!\n\nBest regards,\nYour App Team`,
       });
 
-      // Respond with success
       res.status(200).json({ message: 'Signed up for the game successfully' });
     } catch (error) {
       console.error('Error signing up for the game:', error);
       return res.status(500).json({ error: 'Server error' });
     }
-  });
-};
+  },
+];
 
 // Cancel signup for a game
-exports.cancelSignupForGame = async (req, res) => {
-  const token = req.headers.authorization;
-
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized: No token provided' });
-  }
-
-  jwt.verify(token.split(' ')[1], getKey, {}, async (err, decoded) => {
-    if (err) {
-      console.error('Token verification failed:', err);
-      return res.status(401).json({ error: 'Token verification failed' });
-    }
-
-    const cognitoUserSub = decoded.sub;
+exports.cancelSignupForGame = [
+  authenticateToken,
+  async (req, res) => {
+    const cognitoUserSub = req.user.sub;
 
     try {
       const user = await User.findOne({ cognitoUserSub });
@@ -254,31 +235,30 @@ exports.cancelSignupForGame = async (req, res) => {
 
       await game.save();
 
-      user.games = user.games.filter(g => !g.gameId.equals(game._id));
-      if (user.games_played > 0) {
-        user.games_played -= 1;
-      }
-
+      // Remove the game from the user's list of games
+      user.games = user.games.filter((g) => !g.gameId.equals(game._id));
       await user.save();
 
       // Send cancellation email
       await sendEmail({
         to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
         subject: 'Game Cancellation',
-        html: `<p>Hello ${user.first_name},</p><p>You have successfully canceled your registration for the game at <strong>${game.stadium.name}</strong> on <strong>${(game.date)}</strong>.</p><p>Thank you!</p><p>Best regards,<br>Zeal Team</p>`,
-        text: `Hello ${user.first_name},\n\nYou have successfully canceled your registration for the game at ${game.stadium.name} on ${(game.date)}.\n\nThank you!\n\nBest regards,\nZeal Team`
+        html: `<p>Hello ${user.first_name},</p><p>You have successfully canceled your registration for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>.</p><p>Thank you!</p><p>Best regards,<br>Your App Team</p>`,
+        text: `Hello ${user.first_name},\n\nYou have successfully canceled your registration for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}.\n\nThank you!\n\nBest regards,\nYour App Team`,
       });
 
       // Notify users in the waitlist
       if (game.waitlist && game.waitlist.length > 0) {
-        await Promise.all(game.waitlist.map(async (waitlistUser) => {
-          await sendEmail({
-            to: { email: waitlistUser.email, name: `${waitlistUser.first_name} ${waitlistUser.last_name}` },
-            subject: 'Spot Available for Game',
-            html: `<p>Hello ${waitlistUser.first_name},</p><p>A spot has opened up for the game at <strong>${game.stadium.name}</strong> on <strong>${(game.date).toLocaleString()}</strong>.</p><p>Sign up quickly if you wish to join!</p><p>Best regards,<br>Zeal Team</p>`,
-            text: `Hello ${waitlistUser.first_name},\n\nA spot has opened up for the game at ${game.stadium.name} on ${(game.date).toLocaleString()}.\n\nSign up quickly if you wish to join!\n\nBest regards,\nZeal Team`
-          });
-        }));
+        await Promise.all(
+          game.waitlist.map(async (waitlistUser) => {
+            await sendEmail({
+              to: { email: waitlistUser.email, name: `${waitlistUser.first_name} ${waitlistUser.last_name}` },
+              subject: 'Spot Available for Game',
+              html: `<p>Hello ${waitlistUser.first_name},</p><p>A spot has opened up for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>.</p><p>Sign up quickly if you wish to join!</p><p>Best regards,<br>Your App Team</p>`,
+              text: `Hello ${waitlistUser.first_name},\n\nA spot has opened up for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}.\n\nSign up quickly if you wish to join!\n\nBest regards,\nYour App Team`,
+            });
+          })
+        );
       }
 
       res.status(200).json({ message: 'Successfully canceled signup for the game.' });
@@ -286,118 +266,169 @@ exports.cancelSignupForGame = async (req, res) => {
       console.error('Error canceling signup for the game:', error);
       return res.status(500).json({ error: 'Server error' });
     }
-  });
-};
-
-
-// Fetch a specific game by ID (public route)
-exports.getGameById = async (req, res) => {
-  const { gameId } = req.params;
-
-  // Validate the gameId if using MongoDB
-  if (!mongoose.Types.ObjectId.isValid(gameId)) {
-    return res.status(400).json({ error: 'Invalid game ID' });
-  }
-
-  try {
-    const game = await Game.findById(gameId);
-    if (!game) {
-      return res.status(404).json({ error: 'Game not found' });
-    }
-    res.status(200).json(game);
-  } catch (error) {
-    console.error('Error fetching game:', error);
-    res.status(500).json({ error: 'Server error while fetching the game.' });
-  }
-};
+  },
+];
 
 // Update game status
-exports.updateGameStatus = async (req, res) => {
-  const { gameId } = req.params;
-  const { status } = req.body;
+exports.updateGameStatus = [
+  authenticateToken,
+  async (req, res) => {
+    const cognitoUserSub = req.user.sub;
 
-  // Validate the status value
-  if (!['upcoming', 'in progress', 'finished'].includes(status)) {
-    return res.status(400).json({ error: 'Invalid status value.' });
-  }
+    try {
+      const { gameId } = req.params;
+      const { status, stats } = req.body;
 
-  try {
-    const game = await Game.findById(gameId);
-    if (!game) {
-      return res.status(404).json({ error: 'Game not found' });
+      if (!['upcoming', 'in progress', 'finished'].includes(status)) {
+        return res.status(400).json({ error: 'Invalid status value.' });
+      }
+
+      const game = await Game.findById(gameId);
+      if (!game) {
+        return res.status(404).json({ error: 'Game not found' });
+      }
+
+      // Check if the user is an admin or the host of the game
+      const adminUser = await Admin.findOne({ cognitoUserSub });
+      if (!adminUser && game.host.cognitoUserSub !== cognitoUserSub) {
+        return res.status(403).json({ error: 'Forbidden: You are not authorized to perform this action' });
+      }
+
+      // Update the game status
+      game.status = status;
+
+      // If stats are provided, update player statistics
+      if (stats && Array.isArray(stats)) {
+        stats.forEach((stat) => {
+          const player = game.teams.flat().find((p) => p && p.email === stat.email);
+          if (player) {
+            if (typeof stat.goals === 'number') {
+              player.goals = (player.goals || 0) + stat.goals;
+            }
+            if (typeof stat.assists === 'number') {
+              player.assists = (player.assists || 0) + stat.assists;
+            }
+            if (typeof stat.yellow_cards === 'number') {
+              player.yellow_cards = (player.yellow_cards || 0) + stat.yellow_cards;
+            }
+            if (typeof stat.red_cards === 'number') {
+              player.red_cards = (player.red_cards || 0) + stat.red_cards;
+            }
+            player.attendance = stat.attendance || 'absent';
+          }
+        });
+      }
+
+      // After updating player stats, calculate team goals
+      const teamGoals = [0, 0];
+      game.teams.forEach((team, teamIndex) => {
+        team.forEach((playerData) => {
+          if (playerData && ['present', 'late'].includes(playerData.attendance)) {
+            teamGoals[teamIndex] += playerData.goals || 0;
+          }
+        });
+      });
+
+      // Determine and set the game result
+      let gameOutcome;
+      if (teamGoals[0] > teamGoals[1]) {
+        gameOutcome = 'Team 1 wins';
+      } else if (teamGoals[0] < teamGoals[1]) {
+        gameOutcome = 'Team 2 wins';
+      } else {
+        gameOutcome = 'Draw';
+      }
+
+      game.result = {
+        team1Goals: teamGoals[0],
+        team2Goals: teamGoals[1],
+        outcome: gameOutcome,
+      };
+
+      await game.save();
+
+      // Aggregate stats for users if game is finished
+      if (status === 'finished') {
+        await exports.aggregateGameStats(gameId, teamGoals, gameOutcome);
+      }
+
+      res.status(200).json({
+        message: `Game status updated to ${status} and stats saved.`,
+        game,
+      });
+    } catch (error) {
+      console.error('Error updating game status and stats:', error);
+      res.status(500).json({ error: 'Server error while updating game status and stats.' });
     }
-
-    game.status = status;
-    await game.save();
-
-    res.status(200).json({ message: `Game status updated to ${status}.`, game });
-  } catch (error) {
-    console.error('Error updating game status:', error);
-    res.status(500).json({ error: 'Server error while updating game status.' });
-  }
-};
-
-
-// Update player stats
-exports.updatePlayerStats = async (req, res) => {
-  const { gameId } = req.params;
-  const { teamIndex, playerEmail, goals, assists, yellow_cards, red_cards } = req.body;
-
-  if (teamIndex !== 0 && teamIndex !== 1) {
-    return res.status(400).json({ error: 'Invalid team index. Must be 0 or 1.' });
-  }
-
-  try {
-    const game = await Game.findById(gameId);
-    if (!game) {
-      return res.status(404).json({ error: 'Game not found' });
-    }
-
-    const player = game.teams[teamIndex].find(p => p.email === playerEmail);
-    if (!player) {
-      return res.status(404).json({ error: 'Player not found in the specified team.' });
-    }
-
-    // Update stats if provided
-    if (goals !== undefined) player.goals += goals;
-    if (assists !== undefined) player.assists += assists;
-    if (yellow_cards !== undefined) player.yellow_cards += yellow_cards;
-    if (red_cards !== undefined) player.red_cards += red_cards;
-
-    await game.save();
-
-    res.status(200).json({ message: 'Player stats updated successfully.', player });
-  } catch (error) {
-    console.error('Error updating player stats:', error);
-    res.status(500).json({ error: 'Server error while updating player stats.' });
-  }
-};
+  },
+];
 
 // Aggregate stats after game ends
-exports.aggregateGameStats = async (gameId) => {
+exports.aggregateGameStats = async (gameId, teamGoals, gameOutcome) => {
   try {
     const game = await Game.findById(gameId);
     if (!game || game.status !== 'finished') {
       throw new Error('Game not found or not finished.');
     }
 
-    // Loop through both teams
-    for (const team of game.teams) {
+    // Determine the game result for each team
+    let teamResults = [];
+    if (teamGoals[0] > teamGoals[1]) {
+      teamResults = ['win', 'loss'];
+    } else if (teamGoals[0] < teamGoals[1]) {
+      teamResults = ['loss', 'win'];
+    } else {
+      teamResults = ['draw', 'draw'];
+    }
+
+    // Loop through both teams and update each player's stats in User model
+    for (let teamIndex = 0; teamIndex < game.teams.length; teamIndex++) {
+      const team = game.teams[teamIndex];
+      const teamResult = teamResults[teamIndex];
+
       for (const playerData of team) {
-        if (playerData) {
+        if (playerData && ['present', 'late'].includes(playerData.attendance)) {
           const user = await User.findOne({ email: playerData.email });
           if (user) {
-            user.games_played += 1;
-            user.goals += playerData.goals;
-            user.assists += playerData.assists || 0;
-            user.yellow_cards += playerData.yellow_cards;
-            user.red_cards += playerData.red_cards;
+            // Update attendance count
+            user.attendance_count = (user.attendance_count || 0) + 1;
 
+            // Update games played
+            user.games_played += 1;
+
+            // Update each user's stats based on their performance in the game
+            user.goals += playerData.goals || 0;
+            user.assists += playerData.assists || 0;
+            user.yellow_cards += playerData.yellow_cards || 0;
+            user.red_cards += playerData.red_cards || 0;
+
+            // Assign points based on game result
+            if (teamResult === 'win') {
+              user.points += 3;
+            } else if (teamResult === 'draw') {
+              user.points += 1;
+            }
+
+            // Increment late count if attendance is 'late'
+            if (playerData.attendance === 'late') {
+              user.late_count = (user.late_count || 0) + 1;
+            }
+
+            // Save the user's updated stats
+            await user.save();
+          }
+        } else if (playerData && playerData.attendance === 'absent') {
+          // Record absence
+          const user = await User.findOne({ email: playerData.email });
+          if (user) {
+            user.absence_count = (user.absence_count || 0) + 1;
             await user.save();
           }
         }
       }
     }
+
+    console.log(`Game stats aggregated successfully for game ID: ${gameId}`);
   } catch (error) {
     console.error('Error aggregating game stats:', error);
   }
@@ -408,7 +439,7 @@ exports.fetchUpcomingGames = async (req, res) => {
   try {
     const today = new Date();
     const games = await Game.find({ date: { $gte: today }, status: 'upcoming' })
-      .populate('stadium') // Populate stadium details
+      .populate('stadium')
       .sort({ date: 1, time: 1 });
 
     res.status(200).json(games);
@@ -419,15 +450,10 @@ exports.fetchUpcomingGames = async (req, res) => {
 };
 
 // Add user to the waitlist
-exports.joinWaitlist = async (req, res) => {
-  const token = req.headers.authorization;
-
-  jwt.verify(token.split(' ')[1], getKey, {}, async (err, decoded) => {
-    if (err) {
-      return res.status(401).json({ error: 'Token verification failed' });
-    }
-
-    const cognitoUserSub = decoded.sub;
+exports.joinWaitlist = [
+  authenticateToken,
+  async (req, res) => {
+    const cognitoUserSub = req.user.sub;
 
     try {
       const user = await User.findOne({ cognitoUserSub });
@@ -442,8 +468,9 @@ exports.joinWaitlist = async (req, res) => {
       }
 
       // Check if user is already in teams or waitlist
-      const isAlreadyInGame = game.teams.some(team => team.some(player => player && player.email === user.email)) ||
-                              game.waitlist.some(waitlistUser => waitlistUser.email === user.email);
+      const isAlreadyInGame =
+        game.teams.some((team) => team.some((player) => player && player.email === user.email)) ||
+        game.waitlist.some((waitlistUser) => waitlistUser.email === user.email);
 
       if (isAlreadyInGame) {
         return res.status(400).json({ error: 'You are already signed up for this game or on the waitlist.' });
@@ -463,7 +490,7 @@ exports.joinWaitlist = async (req, res) => {
         to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
         subject: 'Waitlist Confirmation for Game',
         html: `<p>Hello ${user.first_name},</p><p>You have been added to the waitlist for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>. You will receive an email if a spot becomes available.</p><p>Best regards,<br>Your App Team</p>`,
-        text: `Hello ${user.first_name},\n\nYou have been added to the waitlist for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time} . You will receive an email if a spot becomes available.\n\nBest regards,\nYour App Team`
+        text: `Hello ${user.first_name},\n\nYou have been added to the waitlist for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}. You will receive an email if a spot becomes available.\n\nBest regards,\nYour App Team`,
       });
 
       res.status(200).json({ message: 'You have been added to the waitlist.' });
@@ -471,20 +498,14 @@ exports.joinWaitlist = async (req, res) => {
       console.error('Error adding to waitlist:', error);
       res.status(500).json({ error: 'Server error' });
     }
-  });
-};
-
+  },
+];
 
 // Remove user from the waitlist
-exports.leaveWaitlist = async (req, res) => {
-  const token = req.headers.authorization;
-
-  jwt.verify(token.split(' ')[1], getKey, {}, async (err, decoded) => {
-    if (err) {
-      return res.status(401).json({ error: 'Token verification failed' });
-    }
-
-    const cognitoUserSub = decoded.sub;
+exports.leaveWaitlist = [
+  authenticateToken,
+  async (req, res) => {
+    const cognitoUserSub = req.user.sub;
 
     try {
       const user = await User.findOne({ cognitoUserSub });
@@ -499,7 +520,7 @@ exports.leaveWaitlist = async (req, res) => {
       }
 
       // Remove user from the waitlist
-      game.waitlist = game.waitlist.filter(waitlistUser => waitlistUser.email !== user.email);
+      game.waitlist = game.waitlist.filter((waitlistUser) => waitlistUser.email !== user.email);
       await game.save();
 
       // Send confirmation email about leaving the waitlist
@@ -507,7 +528,7 @@ exports.leaveWaitlist = async (req, res) => {
         to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
         subject: 'Removed from Waitlist for Game',
         html: `<p>Hello ${user.first_name},</p><p>You have been removed from the waitlist for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>. You will no longer receive notifications about available spots for this game.</p><p>Best regards,<br>Your App Team</p>`,
-        text: `Hello ${user.first_name},\n\nYou have been removed from the waitlist for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}. You will no longer receive notifications about available spots for this game.\n\nBest regards,\nYour App Team`
+        text: `Hello ${user.first_name},\n\nYou have been removed from the waitlist for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}. You will no longer receive notifications about available spots for this game.\n\nBest regards,\nYour App Team`,
       });
 
       res.status(200).json({ message: 'You have been removed from the waitlist.' });
@@ -515,5 +536,5 @@ exports.leaveWaitlist = async (req, res) => {
       console.error('Error removing from waitlist:', error);
       res.status(500).json({ error: 'Server error' });
     }
-  });
-};
+  },
+];

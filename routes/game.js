@@ -24,10 +24,10 @@ router.post('/waitlist/:gameId', gameController.joinWaitlist);
 router.delete('/waitlist/:gameId', gameController.leaveWaitlist);
 
 // Update game status
-router.patch('/:gameId/status', gameController.updateGameStatus);
+router.put('/:gameId/status', gameController.updateGameStatus);
 
 // Update player stats
-router.patch('/:gameId/player-stats', gameController.updatePlayerStats);
+// router.patch('/:gameId/player-stats', gameController.updatePlayerStats);
 
 // Route to get a specific game by ID (should be last)
 router.get('/:gameId', gameController.getGameById);
