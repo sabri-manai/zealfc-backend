@@ -2,6 +2,59 @@
 
 const mongoose = require('mongoose');
 
+const GameStatsSchema = new mongoose.Schema({
+  gameId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Game',
+    required: true,
+  },
+  date: {
+    type: Date,
+    required: true,
+  },
+  stadium: {
+    type: String,
+    required: true,
+  },
+  goals: {
+    type: Number,
+    default: 0,
+  },
+  assists: {
+    type: Number,
+    default: 0,
+  },
+  yellow_cards: {
+    type: Number,
+    default: 0,
+  },
+  red_cards: {
+    type: Number,
+    default: 0,
+  },
+  attendance: {
+    type: String,
+    enum: ['present', 'absent', 'late'],
+    default: 'absent',
+  },
+  pointsEarned: {
+    type: Number,
+    default: 0,
+  },
+  result: {
+    type: String,
+    enum: ['win', 'loss', 'draw'],
+  },
+  teamIndex: {
+    type: Number,
+  },
+  status: {
+    type: String,
+    enum: ['upcoming', 'in progress', 'finished'], // Game status
+    default: 'upcoming',
+  },
+});
+
 const UserSchema = new mongoose.Schema({
   first_name: {
     type: String,
@@ -69,23 +122,8 @@ const UserSchema = new mongoose.Schema({
     default: {},
     required: true,
   },
-  games: [
-    {
-      gameId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Game',
-        required: true,
-      },
-      date: {
-        type: Date,
-        required: true,
-      },
-      stadium: {
-        type: String,
-        required: true,
-      },
-    },
-  ],
+  games: [GameStatsSchema],
+
   attendance_count: {
     type: Number,
     default: 0,
