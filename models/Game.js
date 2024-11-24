@@ -14,7 +14,13 @@
     assists: { type: Number, default: 0 },
     attendance: {
       type: String,
-      enum: ['present', 'absent', 'late', 'registered'],
+      enum: [
+        'present', 
+        'absent', 
+        'late', 
+        'registered',
+        'waitlist'
+      ],
       default: 'absent',
     },
   }, { _id: false });

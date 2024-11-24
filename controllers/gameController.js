@@ -532,91 +532,119 @@
     };
 
     // Add user to the waitlist
-    exports.joinWaitlist = [
-      authenticateToken,
-      async (req, res) => {
-        const cognitoUserSub = req.user.sub;
+// Add user to the waitlist
+exports.joinWaitlist = [
+  authenticateToken,
+  async (req, res) => {
+    const cognitoUserSub = req.user.sub;
 
-        try {
-          const user = await User.findOne({ cognitoUserSub });
-          if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-          }
+    try {
+      const user = await User.findOne({ cognitoUserSub });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
 
-          const { gameId } = req.params;
-          const game = await Game.findById(gameId);
-          if (!game) {
-            return res.status(404).json({ error: 'Game not found' });
-          }
+      const { gameId } = req.params;
+      const game = await Game.findById(gameId);
+      if (!game) {
+        return res.status(404).json({ error: 'Game not found' });
+      }
 
-          // Check if user is already in teams or waitlist
-          const isAlreadyInGame =
-            game.teams.some((team) => team.some((player) => player && player.email === user.email)) ||
-            game.waitlist.some((waitlistUser) => waitlistUser.email === user.email);
+      // Check if user is already in teams or waitlist
+      const isAlreadyInGame =
+        game.teams.some((team) => team.some((player) => player && player.email === user.email)) ||
+        game.waitlist.some((waitlistUser) => waitlistUser.email === user.email);
 
-          if (isAlreadyInGame) {
-            return res.status(400).json({ error: 'You are already signed up for this game or on the waitlist.' });
-          }
+      if (isAlreadyInGame) {
+        return res.status(400).json({ error: 'You are already signed up for this game or on the waitlist.' });
+      }
 
-          game.waitlist.push({
-            first_name: user.first_name,
-            last_name: user.last_name,
-            email: user.email,
-            position: user.position,
-          });
+      game.waitlist.push({
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+        position: user.position,
+      });
 
-          await game.save();
+      await game.save();
 
-          // Send confirmation email about waitlist status
-          await sendEmail({
-            to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
-            subject: 'Waitlist Confirmation for Game',
-            html: `<p>Hello ${user.first_name},</p><p>You have been added to the waitlist for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>. You will receive an email if a spot becomes available.</p><p>Best regards,<br>Your App Team</p>`,
-            text: `Hello ${user.first_name},\n\nYou have been added to the waitlist for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}. You will receive an email if a spot becomes available.\n\nBest regards,\nYour App Team`,
-          });
+      // Add game to user's games array with attendance 'waitlist' using set()
+      user.set('games', [
+        ...user.games,
+        {
+          gameId: game._id,
+          date: game.date,
+          stadium: game.stadium.name,
+          status: game.status,
+          attendance: 'waitlist',
+        },
+      ]);
 
-          res.status(200).json({ message: 'You have been added to the waitlist.' });
-        } catch (error) {
-          console.error('Error adding to waitlist:', error);
-          res.status(500).json({ error: 'Server error' });
-        }
-      },
-    ];
+      // Optionally, modify a top-level field to force change detection
+      user.lastModified = new Date();
+      await user.save();
 
-    // Remove user from the waitlist
-    exports.leaveWaitlist = [
-      authenticateToken,
-      async (req, res) => {
-        const cognitoUserSub = req.user.sub;
+      // Send confirmation email about waitlist status
+      await sendEmail({
+        to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
+        subject: 'Waitlist Confirmation for Game',
+        html: `<p>Hello ${user.first_name},</p><p>You have been added to the waitlist for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>. You will receive an email if a spot becomes available.</p><p>Best regards,<br>Your App Team</p>`,
+        text: `Hello ${user.first_name},\n\nYou have been added to the waitlist for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}. You will receive an email if a spot becomes available.\n\nBest regards,\nYour App Team`,
+      });
 
-        try {
-          const user = await User.findOne({ cognitoUserSub });
-          if (!user) {
-            return res.status(404).json({ error: 'User not found' });
-          }
+      res.status(200).json({ message: 'You have been added to the waitlist.' });
+    } catch (error) {
+      console.error('Error adding to waitlist:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  },
+];
 
-          const { gameId } = req.params;
-          const game = await Game.findById(gameId);
-          if (!game) {
-            return res.status(404).json({ error: 'Game not found' });
-          }
+// Remove user from the waitlist
+exports.leaveWaitlist = [
+  authenticateToken,
+  async (req, res) => {
+    const cognitoUserSub = req.user.sub;
 
-          // Remove user from the waitlist
-          game.waitlist = game.waitlist.filter((waitlistUser) => waitlistUser.email !== user.email);
-          await game.save();
+    try {
+      const user = await User.findOne({ cognitoUserSub });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
 
-          // Send confirmation email about leaving the waitlist
-          await sendEmail({
-            to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
-            subject: 'Removed from Waitlist for Game',
-            html: `<p>Hello ${user.first_name},</p><p>You have been removed from the waitlist for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>. You will no longer receive notifications about available spots for this game.</p><p>Best regards,<br>Your App Team</p>`,
-            text: `Hello ${user.first_name},\n\nYou have been removed from the waitlist for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}. You will no longer receive notifications about available spots for this game.\n\nBest regards,\nYour App Team`,
-          });
+      const { gameId } = req.params;
+      const game = await Game.findById(gameId);
+      if (!game) {
+        return res.status(404).json({ error: 'Game not found' });
+      }
 
-          res.status(200).json({ message: 'You have been removed from the waitlist.' });
-        } catch (error) {
-          console.error('Error removing from waitlist:', error);
-          res.status(500).json({ error: 'Server error' });
-        }
-      },
-    ];
+      // Remove user from the waitlist
+      game.waitlist = game.waitlist.filter((waitlistUser) => waitlistUser.email !== user.email);
+      await game.save();
+
+      // **Ensure user.games is initialized**
+      user.games = user.games || [];
+
+      // **Remove the game from the user's games array**
+      user.games = user.games.filter((g) => !g.gameId.equals(game._id));
+
+      // **Mark the 'games' field as modified**
+      user.markModified('games');
+
+      await user.save();
+
+      // Send confirmation email about leaving the waitlist
+      await sendEmail({
+        to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
+        subject: 'Removed from Waitlist for Game',
+        html: `<p>Hello ${user.first_name},</p><p>You have been removed from the waitlist for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>. You will no longer receive notifications about available spots for this game.</p><p>Best regards,<br>Your App Team</p>`,
+        text: `Hello ${user.first_name},\n\nYou have been removed from the waitlist for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}. You will no longer receive notifications about available spots for this game.\n\nBest regards,\nYour App Team`,
+      });
+
+      res.status(200).json({ message: 'You have been removed from the waitlist.' });
+    } catch (error) {
+      console.error('Error removing from waitlist:', error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  },
+];
