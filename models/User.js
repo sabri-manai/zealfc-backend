@@ -34,7 +34,7 @@ const GameStatsSchema = new mongoose.Schema({
   },
   attendance: {
     type: String,
-    enum: ['present', 'absent', 'late'],
+    enum: ['present', 'absent', 'late', 'registered'],
     default: 'absent',
   },
   pointsEarned: {

@@ -119,7 +119,7 @@
             red_cards: 0,
             goals: 0,
             assists: 0,
-            attendance: 'absent', // Default attendance
+            attendance: 'registered',
           };
     
           // Check if the user is already signed up for this game
@@ -165,6 +165,7 @@
             date: game.date,
             stadium: game.stadium.name,
             status: game.status,
+            attendance: 'registered',
           });
     
           // Increment the user's games_played count
