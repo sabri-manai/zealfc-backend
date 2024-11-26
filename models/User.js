@@ -1,5 +1,4 @@
 // models/User.js
-
 const mongoose = require('mongoose');
 
 const GameStatsSchema = new mongoose.Schema({
@@ -60,6 +59,22 @@ const GameStatsSchema = new mongoose.Schema({
     default: 'upcoming',
   },
 });
+
+const SubscriptionSchema = new mongoose.Schema({
+  id: {
+    type: String,
+    default: null,
+  },
+  status: {
+    type: String,
+    enum: ['active', 'canceled', 'inactive'], // Define possible statuses
+    default: 'inactive',
+  },
+  current_period_end: {
+    type: Date,
+    default: null,
+  },
+}, { _id: false }); // Prevent creation of an _id for the subscription subdocument
 
 const UserSchema = new mongoose.Schema({
   first_name: {
@@ -146,18 +161,8 @@ const UserSchema = new mongoose.Schema({
     required: true,
   },
   subscription: {
-    id: {
-      type: String,
-      default: null,
-    },
-    status: {
-      type: String,
-      default: null,
-    },
-    current_period_end: {
-      type: Date,
-      default: null,
-    },
+    type: SubscriptionSchema,
+    default: () => ({}),
   },
   stripeCustomerId: {
     type: String,

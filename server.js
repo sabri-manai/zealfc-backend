@@ -25,7 +25,14 @@ app.use(cors({
 }));
 
 // Route for handling webhooks (must be before any body parser middleware)
-app.post('/subscription/webhook', express.raw({ type: 'application/json' }), subscriptionController.handleWebhook);
+// app.post('/subscription/webhook', express.raw({ type: 'application/json' }), subscriptionController.handleWebhook);
+
+// Route for handling Stripe webhooks (must be before any other middleware)
+app.post(
+  '/webhook',
+  express.raw({ type: 'application/json' }),
+  subscriptionController.handleWebhook
+);
 
 // Parse JSON bodies for all other routes
 app.use(express.json());

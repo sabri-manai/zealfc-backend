@@ -3,7 +3,7 @@
 const Stripe = require('stripe');
 const User = require('../models/User');
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const { authenticateToken } = require('../utils/auth');
+const { verifyToken } = require('../middlewares/authMiddleware'); // Updated import
 
 // Handle Stripe webhook events securely
 exports.handleWebhook = async (req, res) => {
@@ -13,8 +13,8 @@ exports.handleWebhook = async (req, res) => {
   let event;
 
   try {
-    // Use raw body for verification
-    event = stripe.webhooks.constructEvent(req.rawBody, sig, endpointSecret);
+    // Use req.body (raw body) for verification
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
   } catch (err) {
     console.error('Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -43,53 +43,41 @@ exports.handleWebhook = async (req, res) => {
 
 // Create a checkout session
 exports.createCheckoutSession = [
-  authenticateToken,
+  verifyToken,
   async (req, res) => {
-    const cognitoUserSub = req.user.sub;
+    const cognitoUserSub = req.user.sub; // Extract user info from token
 
     try {
-      // Retrieve the user from the database
       const user = await User.findOne({ cognitoUserSub });
 
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      const email = user.email;
-
-      // Check if the user already has a Stripe customer ID
       let customerId = user.stripeCustomerId;
 
+      // If the user doesn't have a Stripe customer ID, create one
       if (!customerId) {
-        // Create a new customer in Stripe
         const customer = await stripe.customers.create({
-          email: email,
-          metadata: {
-            userId: user._id.toString(),
-          },
+          email: user.email,
+          metadata: { userId: user._id.toString() },
         });
         customerId = customer.id;
 
-        // Save the customer ID to the user record
+        // Save the Stripe customer ID
         user.stripeCustomerId = customerId;
+        user.lastModified = new Date(); // Ensure Mongoose detects changes
         await user.save();
-      } else {
-        // Update the existing customer's metadata
-        await stripe.customers.update(customerId, {
-          metadata: {
-            userId: user._id.toString(),
-          },
-        });
       }
 
-      // Create the checkout session
+      // Create the Stripe checkout session
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
         payment_method_types: ['card'],
         customer: customerId,
         line_items: [
           {
-            price: process.env.STRIPE_PRICE_ID, // Replace with your actual Price ID
+            price: process.env.STRIPE_PRICE_ID, // Your Stripe price ID
             quantity: 1,
           },
         ],
@@ -107,34 +95,35 @@ exports.createCheckoutSession = [
 
 // Cancel Subscription
 exports.cancelSubscription = [
-  authenticateToken,
+  verifyToken,
   async (req, res) => {
     const cognitoUserSub = req.user.sub;
 
     try {
-      // Retrieve the user from the database
       const user = await User.findOne({ cognitoUserSub });
 
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
 
-      const subscriptionId = user.subscription.id;
+      const subscriptionId = user.subscription?.id;
 
       if (!subscriptionId) {
         return res.status(400).json({ error: 'No active subscription found' });
       }
 
       // Cancel the subscription in Stripe
-      const deletedSubscription = await stripe.subscriptions.del(subscriptionId);
+      const canceledSubscription = await stripe.subscriptions.cancel(subscriptionId);
 
-      // Update the user's subscription status in your database
-      user.subscription.status = deletedSubscription.status || 'canceled';
-      user.subscription.current_period_end = null;
+      // Update the user subscription details
       user.subscription.id = null;
-      await user.save();
+      user.subscription.status = 'canceled';
+      user.subscription.current_period_end = null;
+      user.lastModified = new Date(); // Update the lastModified field
+      user.markModified('subscription');
 
-      res.json({ message: 'Subscription cancelled successfully', deletedSubscription });
+      await user.save();
+      res.json({ message: 'Subscription cancelled successfully', canceledSubscription });
     } catch (error) {
       console.error('Error cancelling subscription:', error);
       res.status(500).json({ error: 'Failed to cancel subscription' });
@@ -142,15 +131,17 @@ exports.cancelSubscription = [
   },
 ];
 
+
 // Get Subscription
 exports.getSubscription = [
-  authenticateToken,
+  verifyToken, // Updated middleware
   async (req, res) => {
-    const cognitoUserSub = req.user.sub;
+    const cognitoUserSub = req.user.sub; // Get sub from decoded token
 
     try {
+      console.log("Before findOne:", cognitoUserSub);
       const user = await User.findOne({ cognitoUserSub });
-
+      console.log("After findOne:", user);
       if (user && user.subscription) {
         res.json({ subscription: user.subscription });
       } else {
@@ -167,52 +158,101 @@ exports.getSubscription = [
 async function handleCheckoutSessionCompleted(event) {
   const session = event.data.object;
 
-  // Retrieve the customer
-  const customer = await stripe.customers.retrieve(session.customer);
+  try {
+    // Retrieve the subscription from the session
+    const subscriptionId = session.subscription;
+    if (!subscriptionId) {
+      console.error('No subscription ID found in session.');
+      return;
+    }
 
-  // Find the user in your database
-  const userId = customer.metadata.userId;
-  const user = await User.findById(userId);
+    // Retrieve the subscription object from Stripe
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    if (!subscription) {
+      console.error(`Subscription ${subscriptionId} not found.`);
+      return;
+    }
 
-  if (user) {
-    // Update user subscription details
-    user.subscription = {
-      id: session.subscription,
-      status: 'active',
-      current_period_end: new Date(session.expires_at * 1000),
-    };
+    // Retrieve the customer associated with the subscription
+    const customer = await stripe.customers.retrieve(subscription.customer);
+    if (!customer) {
+      console.error(`Customer ${subscription.customer} not found.`);
+      return;
+    }
 
-    await user.save();
-    console.log(`User ${user.email} subscription updated successfully.`);
-  } else {
-    console.error(`User not found for customer ID: ${customer.id}`);
+    // Find the user in your database
+    const userId = customer.metadata.userId;
+    const user = await User.findById(userId);
+
+    if (user) {
+      // Update user subscription details
+      user.subscription.id = subscription.id;
+      user.subscription.status = subscription.status; // e.g., 'active'
+      user.subscription.current_period_end = new Date(subscription.current_period_end * 1000);
+      user.lastModified = new Date(); // Update the lastModified field
+      user.markModified('subscription');
+
+      await user.save();
+      console.log(`User ${user.email} subscription updated successfully.`);
+    } else {
+      console.error(`User not found for customer ID: ${customer.id}`);
+    }
+  } catch (error) {
+    console.error('Error handling checkout session completed:', error);
   }
 }
+
 
 // Handle Invoice Payment Succeeded
 async function handleInvoicePaymentSucceeded(event) {
   const invoice = event.data.object;
 
-  // Retrieve the subscription
-  const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+  try {
+    // Retrieve the subscription from the invoice
+    const subscriptionId = invoice.subscription;
+    if (!subscriptionId) {
+      console.error('No subscription ID found in invoice.');
+      return;
+    }
 
-  // Retrieve the customer
-  const customer = await stripe.customers.retrieve(subscription.customer);
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    if (!subscription) {
+      console.error(`Subscription ${subscriptionId} not found.`);
+      return;
+    }
 
-  // Find the user in your database
-  const userId = customer.metadata.userId;
-  const user = await User.findById(userId);
+    // Retrieve the customer associated with the subscription
+    const customer = await stripe.customers.retrieve(subscription.customer);
+    if (!customer) {
+      console.error(`Customer ${subscription.customer} not found.`);
+      return;
+    }
 
-  if (user) {
-    // Update user's subscription period end
-    user.subscription.current_period_end = new Date(subscription.current_period_end * 1000);
-    user.credits += 10; // Add credits for renewal
-    await user.save();
-    console.log(`User ${user.email} subscription renewed successfully.`);
-  } else {
-    console.error(`User not found for customer ID: ${customer.id}`);
+    // Find the user in your database
+    const userId = customer.metadata.userId;
+    const user = await User.findById(userId);
+
+    if (user) {
+      // Update user's subscription period end
+      if (subscription.current_period_end) {
+        user.subscription.current_period_end = new Date(subscription.current_period_end * 1000);
+      }
+
+      // Ensure credits is a number before incrementing
+      user.credits = (typeof user.credits === 'number' ? user.credits : 0) + 10;
+
+      user.lastModified = new Date(); // Update the lastModified field
+
+      await user.save();
+      console.log(`User ${user.email} subscription renewed successfully.`);
+    } else {
+      console.error(`User not found for customer ID: ${customer.id}`);
+    }
+  } catch (error) {
+    console.error('Error handling invoice payment succeeded:', error);
   }
 }
+
 
 // Handle Subscription Deleted
 async function handleSubscriptionDeleted(event) {
@@ -226,9 +266,15 @@ async function handleSubscriptionDeleted(event) {
   const user = await User.findById(userId);
 
   if (user) {
-    // Update user's subscription status
-    user.subscription.status = subscription.status;
+    // Update user subscription details directly
+    user.subscription.id = null;
+    user.subscription.status = 'canceled';
+    user.subscription.current_period_end = null;
+    user.lastModified = new Date();
+    user.markModified('subscription');
+
     await user.save();
+
     console.log(`User ${user.email} subscription canceled.`);
   } else {
     console.error(`User not found for customer ID: ${customer.id}`);

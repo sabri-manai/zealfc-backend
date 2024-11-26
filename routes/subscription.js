@@ -1,21 +1,18 @@
-// routes/subscription.js
-
 const express = require('express');
 const router = express.Router();
 const subscriptionController = require('../controllers/subscriptionController');
-
-// Remove the webhook route from here since it's defined in server.js
-
-// Use express.json() for parsing JSON bodies
-// No need to apply express.json() here since it's already applied in server.js
+const { verifyToken } = require('../middlewares/authMiddleware');
 
 // Create a Checkout Session
-router.post('/create-checkout-session', subscriptionController.createCheckoutSession);
+router.post('/create-checkout-session', verifyToken, subscriptionController.createCheckoutSession);
 
 // Cancel Subscription
-router.post('/cancel-subscription', subscriptionController.cancelSubscription);
+router.post('/cancel-subscription', verifyToken, subscriptionController.cancelSubscription);
 
 // Get Subscription
-router.get('/:userId', subscriptionController.getSubscription);
+router.get('/', verifyToken, subscriptionController.getSubscription);
+
+// // Get Subscription
+// router.get('/:userId', subscriptionController.getSubscription);
 
 module.exports = router;
