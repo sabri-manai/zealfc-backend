@@ -4,6 +4,7 @@ const Stripe = require('stripe');
 const User = require('../models/User');
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const { verifyToken } = require('../middlewares/authMiddleware'); // Updated import
+const { sendEmail } = require('../services/emailService');
 
 // Handle Stripe webhook events securely
 exports.handleWebhook = async (req, res) => {
@@ -81,7 +82,7 @@ exports.createCheckoutSession = [
             quantity: 1,
           },
         ],
-        success_url: `${process.env.FRONTEND_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
+        success_url: `${process.env.FRONTEND_URL}/profile?userId=${user._id}`, // Redirect to profile page
         cancel_url: `${process.env.FRONTEND_URL}/cancel`,
       });
 
@@ -136,12 +137,10 @@ exports.cancelSubscription = [
 exports.getSubscription = [
   verifyToken, // Updated middleware
   async (req, res) => {
-    const cognitoUserSub = req.user.sub; // Get sub from decoded token
+    const cognitoUserSub = req.user.sub;
 
     try {
-      console.log("Before findOne:", cognitoUserSub);
       const user = await User.findOne({ cognitoUserSub });
-      console.log("After findOne:", user);
       if (user && user.subscription) {
         res.json({ subscription: user.subscription });
       } else {
@@ -245,6 +244,14 @@ async function handleInvoicePaymentSucceeded(event) {
 
       await user.save();
       console.log(`User ${user.email} subscription renewed successfully.`);
+
+      // Send subscription renewal email
+      await sendEmail({
+        to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
+        subject: 'Subscription Renewed',
+        html: `<p>Hello ${user.first_name},</p><p>Your subscription has been successfully renewed. Your next billing date is <strong>${new Date(subscription.current_period_end * 1000).toLocaleDateString()}</strong>.</p><p>Thank you for being with us!</p>`,
+        text: `Hello ${user.first_name},\n\nYour subscription has been successfully renewed. Your next billing date is ${new Date(subscription.current_period_end * 1000).toLocaleDateString()}.\n\nThank you for being with us!`,
+      });
     } else {
       console.error(`User not found for customer ID: ${customer.id}`);
     }
@@ -253,31 +260,41 @@ async function handleInvoicePaymentSucceeded(event) {
   }
 }
 
-
 // Handle Subscription Deleted
 async function handleSubscriptionDeleted(event) {
   const subscription = event.data.object;
 
-  // Retrieve the customer
-  const customer = await stripe.customers.retrieve(subscription.customer);
+  try {
+    // Retrieve the customer
+    const customer = await stripe.customers.retrieve(subscription.customer);
 
-  // Find the user in your database
-  const userId = customer.metadata.userId;
-  const user = await User.findById(userId);
+    // Find the user in your database
+    const userId = customer.metadata.userId;
+    const user = await User.findById(userId);
 
-  if (user) {
-    // Update user subscription details directly
-    user.subscription.id = null;
-    user.subscription.status = 'canceled';
-    user.subscription.current_period_end = null;
-    user.lastModified = new Date();
-    user.markModified('subscription');
+    if (user) {
+      // Update user subscription details directly
+      user.subscription.id = null;
+      user.subscription.status = 'canceled';
+      user.subscription.current_period_end = null;
+      user.lastModified = new Date();
+      user.markModified('subscription');
 
-    await user.save();
+      await user.save();
+      console.log(`User ${user.email} subscription canceled.`);
 
-    console.log(`User ${user.email} subscription canceled.`);
-  } else {
-    console.error(`User not found for customer ID: ${customer.id}`);
+      // Send subscription cancellation email
+      await sendEmail({
+        to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
+        subject: 'Subscription Canceled',
+        html: `<p>Hello ${user.first_name},</p><p>Your subscription has been canceled. If this was not intentional, please contact support or renew your subscription to continue enjoying our services.</p><p>Best regards,<br>Zealfc Team</p>`,
+        text: `Hello ${user.first_name},\n\nYour subscription has been canceled. If this was not intentional, please contact support or renew your subscription to continue enjoying our services.\n\nBest regards,\nZealfc Team`,
+      });
+    } else {
+      console.error(`User not found for customer ID: ${customer.id}`);
+    }
+  } catch (error) {
+    console.error('Error handling subscription deleted:', error);
   }
 }
 

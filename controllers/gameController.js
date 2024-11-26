@@ -180,7 +180,7 @@
                    <p>You have successfully signed up for the game at <strong>${game.stadium.name}</strong> on 
                    <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>.</p>
                    <p>Thank you for joining!</p>
-                   <p>Best regards,<br>Your App Team</p>`,
+                   <p>Best regards,<br>Zealfc Team</p>`,
           });
     
           // Respond with success
@@ -264,8 +264,8 @@
           await sendEmail({
             to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
             subject: 'Game Cancellation',
-            html: `<p>Hello ${user.first_name},</p><p>You have successfully canceled your registration for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>.</p><p>Thank you!</p><p>Best regards,<br>Your App Team</p>`,
-            text: `Hello ${user.first_name},\n\nYou have successfully canceled your registration for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}.\n\nThank you!\n\nBest regards,\nYour App Team`,
+            html: `<p>Hello ${user.first_name},</p><p>You have successfully canceled your registration for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>.</p><p>Thank you!</p><p>Best regards,<br>Zealfc Team</p>`,
+            text: `Hello ${user.first_name},\n\nYou have successfully canceled your registration for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}.\n\nThank you!\n\nBest regards,\nZealfc Team`,
           });
 
           // Notify users in the waitlist
@@ -275,8 +275,8 @@
                 await sendEmail({
                   to: { email: waitlistUser.email, name: `${waitlistUser.first_name} ${waitlistUser.last_name}` },
                   subject: 'Spot Available for Game',
-                  html: `<p>Hello ${waitlistUser.first_name},</p><p>A spot has opened up for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>.</p><p>Sign up quickly if you wish to join!</p><p>Best regards,<br>Your App Team</p>`,
-                  text: `Hello ${waitlistUser.first_name},\n\nA spot has opened up for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}.\n\nSign up quickly if you wish to join!\n\nBest regards,\nYour App Team`,
+                  html: `<p>Hello ${waitlistUser.first_name},</p><p>A spot has opened up for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>.</p><p>Sign up quickly if you wish to join!</p><p>Best regards,<br>Zealfc Team</p>`,
+                  text: `Hello ${waitlistUser.first_name},\n\nA spot has opened up for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}.\n\nSign up quickly if you wish to join!\n\nBest regards,\nZealfc Team`,
                 });
               })
             );
@@ -585,8 +585,8 @@
           await sendEmail({
             to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
             subject: 'Waitlist Confirmation for Game',
-            html: `<p>Hello ${user.first_name},</p><p>You have been added to the waitlist for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>. You will receive an email if a spot becomes available.</p><p>Best regards,<br>Your App Team</p>`,
-            text: `Hello ${user.first_name},\n\nYou have been added to the waitlist for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}. You will receive an email if a spot becomes available.\n\nBest regards,\nYour App Team`,
+            html: `<p>Hello ${user.first_name},</p><p>You have been added to the waitlist for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>. You will receive an email if a spot becomes available.</p><p>Best regards,<br>Zealfc Team</p>`,
+            text: `Hello ${user.first_name},\n\nYou have been added to the waitlist for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}. You will receive an email if a spot becomes available.\n\nBest regards,\nZealfc Team`,
           });
 
           res.status(200).json({ message: 'You have been added to the waitlist.' });
@@ -634,8 +634,8 @@
           await sendEmail({
             to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
             subject: 'Removed from Waitlist for Game',
-            html: `<p>Hello ${user.first_name},</p><p>You have been removed from the waitlist for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>. You will no longer receive notifications about available spots for this game.</p><p>Best regards,<br>Your App Team</p>`,
-            text: `Hello ${user.first_name},\n\nYou have been removed from the waitlist for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}. You will no longer receive notifications about available spots for this game.\n\nBest regards,\nYour App Team`,
+            html: `<p>Hello ${user.first_name},</p><p>You have been removed from the waitlist for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>. You will no longer receive notifications about available spots for this game.</p><p>Best regards,<br>Zealfc Team</p>`,
+            text: `Hello ${user.first_name},\n\nYou have been removed from the waitlist for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}. You will no longer receive notifications about available spots for this game.\n\nBest regards,\nZealfc Team`,
           });
 
           res.status(200).json({ message: 'You have been removed from the waitlist.' });
