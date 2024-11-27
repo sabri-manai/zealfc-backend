@@ -135,9 +135,9 @@ exports.confirm = async (req, res) => {
     const { IdToken, AccessToken, RefreshToken } = authResponse.AuthenticationResult;
 
     res.status(200).send({
-      idToken: IdToken,
-      accessToken: AccessToken,
-      refreshToken: RefreshToken,
+      IdToken: IdToken,
+      AccessToken: AccessToken,
+      RefreshToken: RefreshToken,
     });
   } catch (error) {
     console.error('Error during user confirmation:', error);
