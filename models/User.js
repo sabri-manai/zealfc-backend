@@ -74,6 +74,11 @@ const SubscriptionSchema = new mongoose.Schema({
     type: Date,
     default: null,
   },
+  type: {
+    type: String,
+    enum: ['Basic', 'Premium', 'Mate', ''],
+    default: '',
+  }
 }, { _id: false }); // Prevent creation of an _id for the subscription subdocument
 
 const UserSchema = new mongoose.Schema({

@@ -19,6 +19,8 @@ router.get(
     profileController.getUserGames
 );
 
+router.put("/user-profile", verifyToken, profileController.updateUserProfile);
+
 // Configure Multer storage
 const storage = multer.memoryStorage(); // Store files in memory as Buffer
 

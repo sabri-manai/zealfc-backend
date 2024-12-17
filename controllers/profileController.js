@@ -83,3 +83,43 @@ exports.getUserGames = [
     }
   },
 ];
+
+exports.updateUserProfile = [
+  authenticateToken,
+  async (req, res) => {
+    const cognitoUserSub = req.user.sub;
+    const { firstName, lastName, email } = req.body;
+
+    try {
+      const user = await User.findOne({ cognitoUserSub });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // If the fields are stored as first_name, last_name in DB, use them accordingly:
+      const newFirstName = firstName || user.first_name;
+      const newLastName = lastName || user.last_name;
+      const newEmail = email || user.email;
+
+      // If no fields are updated, return an error
+      if (
+        newFirstName === user.first_name &&
+        newLastName === user.last_name &&
+        newEmail === user.email
+      ) {
+        return res.status(400).json({ error: 'No changes to update' });
+      }
+
+      // Update the user fields
+      user.first_name = newFirstName;
+      user.last_name = newLastName;
+      user.email = newEmail;
+
+      await user.save();
+      return res.status(200).json({ message: 'Profile updated successfully' });
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      return res.status(500).json({ error: 'Server error while updating profile.' });
+    }
+  },
+];
