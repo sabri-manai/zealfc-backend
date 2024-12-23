@@ -115,6 +115,10 @@ exports.signupForGame = [
       const game = await Game.findById(gameId);
       if (!game) return res.status(404).json({ error: 'Game not found' });
 
+      if (game.status !== 'upcoming') {
+        return res.status(400).json({ error: 'This game already finished. You cannot sign up.' });
+      }
+
       // Remove expired credits first
       removeExpiredCredits(user);
 
@@ -268,6 +272,10 @@ exports.cancelSignupForGame = [
       const game = await Game.findById(gameId);
       if (!game) {
         return res.status(404).json({ error: 'Game not found' });
+      }
+      // NEW: Prevent canceling up if the game started
+      if (game.status !== 'upcoming') {
+        return res.status(400).json({ error: 'This game already started. You cannot cancel.' });
       }
 
       // We need to find the user in either team[0] or team[1]
