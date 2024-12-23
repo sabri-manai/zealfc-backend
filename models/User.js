@@ -81,6 +81,16 @@ const SubscriptionSchema = new mongoose.Schema({
   }
 }, { _id: false }); // Prevent creation of an _id for the subscription subdocument
 
+const CreditEntrySchema = new mongoose.Schema({
+  amount: { type: Number, required: true },
+  type: {
+    type: String,
+    enum: ['subscription', 'permanent'],
+    default: 'subscription'
+  },
+  expires_at: { type: Date, default: null } // null for permanent credits
+}, { _id: false });
+
 const UserSchema = new mongoose.Schema({
   first_name: {
     type: String,
@@ -118,11 +128,6 @@ const UserSchema = new mongoose.Schema({
     default: 0,
     required: true,
   },
-  credits: {
-    type: Number,
-    default: 0,
-    required: true,
-  },
   position: {
     type: String,
     default: 'Unknown',
@@ -148,8 +153,6 @@ const UserSchema = new mongoose.Schema({
     default: {},
     required: true,
   },
-  games: [GameStatsSchema],
-
   attendance_count: {
     type: Number,
     default: 0,
@@ -165,10 +168,6 @@ const UserSchema = new mongoose.Schema({
     default: 0,
     required: true,
   },
-  subscription: {
-    type: SubscriptionSchema,
-    default: () => ({}),
-  },
   stripeCustomerId: {
     type: String,
     default: null,
@@ -177,6 +176,17 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  games: [GameStatsSchema],
+
+  subscription: {
+    type: SubscriptionSchema,
+    default: () => ({}),
+  },
+  credits: {
+    type: [CreditEntrySchema],
+    default: []
+  },
+
 });
 
 const User = mongoose.model('User', UserSchema);

@@ -1,144 +1,157 @@
-    // controllers/gameController.js
+// controllers/gameController.js
 
-    const Game = require('../models/Game');
-    const Stadium = require('../models/Stadium');
-    const User = require('../models/User');
-    const Admin = require('../models/Admin');
-    const { sendEmail } = require('../services/emailService');
-    const mongoose = require('mongoose');
+const Game = require('../models/Game');
+const Stadium = require('../models/Stadium');
+const User = require('../models/User');
+const Admin = require('../models/Admin');
+const mongoose = require('mongoose');
+const { sendEmail } = require('../services/emailService');
 
-    // Import the authenticateToken middleware
-    const { authenticateToken } = require('../utils/auth');
+// Import the authenticateToken middleware
+const { authenticateToken } = require('../utils/auth');
+const { 
+  removeExpiredCredits, 
+  totalAvailableCredits, 
+  consumeCredits 
+} = require('../utils/credits');
 
-    // Create a new game
-    exports.createGame = async (req, res) => {
-      const { stadiumId, hostId, date, time, duration, type } = req.body;
+// Create a new game
+exports.createGame = async (req, res) => {
+  const { stadiumId, hostId, date, time, duration, type } = req.body;
 
-      // Validate required fields
-      if (!stadiumId || !hostId || !date || !time || !duration || !type) {
-        return res.status(400).json({ error: 'All required fields must be provided.' });
-      }
+  // Validate required fields
+  if (!stadiumId || !hostId || !date || !time || !duration || !type) {
+    return res.status(400).json({ error: 'All required fields must be provided.' });
+  }
 
-      try {
-        const stadium = await Stadium.findById(stadiumId).lean();
-        if (!stadium) {
-          return res.status(404).json({ error: 'Stadium not found.' });
-        }
+  try {
+    const stadium = await Stadium.findById(stadiumId).lean();
+    if (!stadium) {
+      return res.status(404).json({ error: 'Stadium not found.' });
+    }
 
-        const host = await Admin.findById(hostId)
-          .select('-cognitoUserSub -role -permissions -createdAt')
-          .lean();
-        if (!host) {
-          return res.status(404).json({ error: 'Host not found.' });
-        }
+    const host = await Admin.findById(hostId)
+      .select('-cognitoUserSub -role -permissions -createdAt')
+      .lean();
+    if (!host) {
+      return res.status(404).json({ error: 'Host not found.' });
+    }
 
-        // Initialize teams
-        const teamSize = Math.floor(stadium.capacity / 2);
-        const teams = [Array(teamSize).fill(null), Array(teamSize).fill(null)];
+    // Initialize teams
+    const teamSize = Math.floor(stadium.capacity / 2);
+    const teams = [Array(teamSize).fill(null), Array(teamSize).fill(null)];
 
-        // Create a new game with embedded stadium and host data
-        const newGame = new Game({
-          teams,
-          stadium,
-          host,
-          date: new Date(date),
-          time,
-          duration,
-          type,
-          status: 'upcoming',
-        });
+    // Create a new game with embedded stadium and host data
+    const newGame = new Game({
+      teams,
+      stadium,
+      host,
+      date: new Date(date),
+      time,
+      duration,
+      type,
+      status: 'upcoming',
+    });
 
-        await newGame.save();
-        res.status(201).json(newGame);
-      } catch (error) {
-        console.error('Error creating game:', error);
-        res.status(500).json({ error: 'Server error while creating the game.' });
-      }
-    };
+    await newGame.save();
+    res.status(201).json(newGame);
+  } catch (error) {
+    console.error('Error creating game:', error);
+    res.status(500).json({ error: 'Server error while creating the game.' });
+  }
+};
 
-    // Fetch all games (public route)
-    exports.getAllGames = async (req, res) => {
-      try {
-        const games = await Game.find();
-        res.status(200).json(games);
-      } catch (error) {
-        console.error('Error fetching games:', error);
-        res.status(500).json({ error: 'Server error while fetching games.' });
-      }
-    };
+// Fetch all games (public route)
+exports.getAllGames = async (req, res) => {
+  try {
+    const games = await Game.find();
+    res.status(200).json(games);
+  } catch (error) {
+    console.error('Error fetching games:', error);
+    res.status(500).json({ error: 'Server error while fetching games.' });
+  }
+};
 
-    // Fetch a specific game by ID (public route)
-    exports.getGameById = async (req, res) => {
-      const { gameId } = req.params;
+// Fetch a specific game by ID (public route)
+exports.getGameById = async (req, res) => {
+  const { gameId } = req.params;
 
-      if (!mongoose.Types.ObjectId.isValid(gameId)) {
-        return res.status(400).json({ error: 'Invalid game ID' });
-      }
+  if (!mongoose.Types.ObjectId.isValid(gameId)) {
+    return res.status(400).json({ error: 'Invalid game ID' });
+  }
 
-      try {
-        const game = await Game.findById(gameId);
-        if (!game) {
-          return res.status(404).json({ error: 'Game not found' });
-        }
-        res.status(200).json(game);
-      } catch (error) {
-        console.error('Error fetching game:', error);
-        res.status(500).json({ error: 'Server error while fetching the game.' });
-      }
-    };
+  try {
+    const game = await Game.findById(gameId);
+    if (!game) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+    res.status(200).json(game);
+  } catch (error) {
+    console.error('Error fetching game:', error);
+    res.status(500).json({ error: 'Server error while fetching the game.' });
+  }
+};
 
-// Signup player for a game
+/* 
+   ---------------------------------------------------------------------
+   SIGNUP FOR A GAME
+   ---------------------------------------------------------------------
+*/
 exports.signupForGame = [
   authenticateToken,
   async (req, res) => {
     const cognitoUserSub = req.user.sub;
 
     try {
-      // Find the user associated with the cognitoUserSub
       const user = await User.findOne({ cognitoUserSub });
       if (!user) return res.status(404).json({ error: 'User not found' });
 
       const { gameId } = req.params;
 
-      // Validate the gameId
       if (!mongoose.Types.ObjectId.isValid(gameId)) {
         return res.status(400).json({ error: 'Invalid game ID provided' });
       }
 
-      // Find the game using the provided gameId
       const game = await Game.findById(gameId);
       if (!game) return res.status(404).json({ error: 'Game not found' });
 
-      // Check if the user has enough credits
-      if (user.credits < 1) {
+      // Remove expired credits first
+      removeExpiredCredits(user);
+
+      // Check if user has enough credits
+      const totalCredits = totalAvailableCredits(user);
+      if (totalCredits < 1) {
         return res.status(400).json({ error: 'Not enough credits to sign up for the game.' });
       }
 
-      // Prepare the user object specific to this game
+      // Prepare user object for this game
       const userObject = {
         first_name: user.first_name,
         last_name: user.last_name,
         email: user.email,
         position: user.position,
-        yellow_cards: 0, // Reset stats for the game
+        yellow_cards: 0,
         red_cards: 0,
         goals: 0,
         assists: 0,
         attendance: 'registered',
+
+        // 1) We'll fill this after consuming credits
+        usedCreditsForThisGame: [],
       };
 
-      // Check if the user is already signed up for this game
-      const isAlreadySignedUp = game.teams.some(team =>
-        team.some(player => player && player.email === user.email)
+      // Check if user is already signed up
+      const isAlreadySignedUp = game.teams.some((team) =>
+        team.some((player) => player && player.email === user.email)
       );
       if (isAlreadySignedUp) {
         return res.status(400).json({ error: 'You are already signed up for this game.' });
       }
 
-      // Remove the user from the waitlist if they are on it
-      game.waitlist = game.waitlist.filter(waitlistUser => waitlistUser.email !== user.email);
+      // Remove user from waitlist if present
+      game.waitlist = game.waitlist.filter((waitlistUser) => waitlistUser.email !== user.email);
 
-      // Assign the user to the first available slot in either team
+      // Assign user to first available slot
       let assigned = false;
       for (let i = 0; i < game.teams[0].length; i++) {
         if (!game.teams[0][i]) {
@@ -157,16 +170,46 @@ exports.signupForGame = [
         }
       }
 
-      if (!assigned) return res.status(400).json({ error: 'Game is full' });
+      if (!assigned) {
+        return res.status(400).json({ error: 'Game is full' });
+      }
 
-      // Deduct one credit from the user
-      user.credits -= 1;
+      // Consume 1 credit
+      const usedCredits = consumeCredits(user, 1);
+      if (!usedCredits) {
+        // Revert slot assignment
+        game.teams = game.teams.map((team) =>
+          team.map((player) => (player && player.email === user.email ? null : player))
+        );
+        game.markModified('teams');
+        await game.save();
+        return res.status(400).json({ error: 'Not enough credits after all (unexpected error).' });
+      }
 
-      // Mark the `teams` field as modified to ensure Mongoose tracks the change
+      // 2) Attach the used credits to the player's record in the game
+      //    We already assigned userObject, so let's find that same spot and update it:
+      let assignedTeamIndex = null;
+      let assignedPlayerIndex = null;
+      for (let t = 0; t < 2; t++) {
+        for (let p = 0; p < game.teams[t].length; p++) {
+          if (game.teams[t][p] && game.teams[t][p].email === user.email) {
+            game.teams[t][p].usedCreditsForThisGame = usedCredits;
+            assignedTeamIndex = t;
+            assignedPlayerIndex = p;
+            break;
+          }
+        }
+        if (assignedTeamIndex !== null) break;
+      }
+
+      // Mark teams modified and save the game
       game.markModified('teams');
       await game.save();
 
-      // Add the game to the user's list of games
+      // Save the user changes (since we consumed credits)
+      user.markModified('credits');
+
+      // Optional: track the game in user.games 
       user.games = user.games || [];
       user.games.push({
         gameId: game._id,
@@ -175,9 +218,7 @@ exports.signupForGame = [
         status: game.status,
         attendance: 'registered',
       });
-
-      // Increment the user's games_played count
-      user.games_played = (user.games_played || 0) + 1;
+      user.markModified('games');
       await user.save();
 
       // Send confirmation email
@@ -187,26 +228,26 @@ exports.signupForGame = [
         html: `<p>Hello ${user.first_name},</p>
                <p>You have successfully signed up for the game at <strong>${game.stadium.name}</strong> on 
                <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>.</p>
-               <p>One credit has been deducted from your account.</p>
+               <p>One credit has been deducted from your account (oldest credits first).</p>
                <p>Thank you for joining!</p>
                <p>Best regards,<br>Zealfc Team</p>`,
       });
 
-      // Respond with success
-      res.status(200).json({ message: 'Signed up for the game successfully. One credit has been deducted from your account.' });
+      res.status(200).json({
+        message: 'Signed up for the game successfully. One credit has been deducted.',
+      });
     } catch (error) {
       console.error('Error signing up for the game:', error);
-
-      // Explicitly log the error stack for debugging
-      console.error(error.stack);
-
-      // Respond with a server error
       res.status(500).json({ error: 'Server error' });
     }
   },
 ];
 
-// Cancel signup for a game
+/* 
+   ---------------------------------------------------------------------
+   CANCEL SIGNUP FOR A GAME
+   ---------------------------------------------------------------------
+*/
 exports.cancelSignupForGame = [
   authenticateToken,
   async (req, res) => {
@@ -229,20 +270,31 @@ exports.cancelSignupForGame = [
         return res.status(404).json({ error: 'Game not found' });
       }
 
+      // We need to find the user in either team[0] or team[1]
       let removed = false;
+      let removedTeamIndex = null;
+      let removedPlayerCredits = [];
+
+      // Search team[0]
       for (let i = 0; i < game.teams[0].length; i++) {
         if (game.teams[0][i] && game.teams[0][i].email === user.email) {
-          game.teams[0][i] = null; // Use null instead of undefined
+          // Grab the used credits for refund (if applicable)
+          removedPlayerCredits = game.teams[0][i].usedCreditsForThisGame || [];
+          game.teams[0][i] = null; // remove them from the slot
           removed = true;
+          removedTeamIndex = 0;
           break;
         }
       }
 
+      // If not found in team[0], check team[1]
       if (!removed) {
         for (let i = 0; i < game.teams[1].length; i++) {
           if (game.teams[1][i] && game.teams[1][i].email === user.email) {
-            game.teams[1][i] = null; // Use null instead of undefined
+            removedPlayerCredits = game.teams[1][i].usedCreditsForThisGame || [];
+            game.teams[1][i] = null;
             removed = true;
+            removedTeamIndex = 1;
             break;
           }
         }
@@ -252,29 +304,40 @@ exports.cancelSignupForGame = [
         return res.status(400).json({ error: 'User is not signed up for this game.' });
       }
 
-      // Inform Mongoose that 'teams' field has been modified
+      // Mark the 'teams' field as modified
       game.markModified('teams');
 
       // Save the updated game
       await game.save();
 
-      // Remove the game from the user's list of games
+      // Remove the game from the user's list of games (optional or as needed)
       user.games = user.games.filter((g) => !g.gameId.equals(game._id));
-
-      // Inform Mongoose that 'games' field has been modified
       user.markModified('games');
 
-      // Check if cancellation is before 48 hours from game time
+      // Check if cancellation is >= 48 hours before game time
       const gameDateTime = new Date(`${game.date.toISOString().split('T')[0]}T${game.time}`);
       const now = new Date();
       const hoursDifference = (gameDateTime - now) / (1000 * 60 * 60);
 
+      // If it's an early cancellation, fully refund the same credits used
       if (hoursDifference >= 48) {
-        // Refund one credit to the user
-        user.credits += 1;
+        // Instead of calling consumeCredits again, we directly push back
+        // the exact credits that were used for this game
+        for (const credit of removedPlayerCredits) {
+          user.credits.push({
+            amount: credit.amount,
+            type: credit.type,
+            expires_at: credit.expires_at,
+          });
+        }
+        user.markModified('credits');
+
+        // (Optional) If you don’t want to allow partial usage from that array again,
+        // you might also wipe out removedPlayerCredits to indicate they've been refunded.
+        // But since we've already removed the player from the game, that's typically enough.
       }
 
-      // Save the updated user
+      // Finally save the user
       await user.save();
 
       // Send cancellation email
@@ -282,27 +345,16 @@ exports.cancelSignupForGame = [
         to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
         subject: 'Game Cancellation',
         html: `<p>Hello ${user.first_name},</p>
-               <p>You have successfully canceled your registration for the game at <strong>${game.stadium.name}</strong> on 
+               <p>You have successfully canceled your registration for the game at <strong>${game.stadium.name}</strong> on
                <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>.</p>
-               ${hoursDifference >= 48 ? '<p>Your credit has been refunded.</p>' : ''}
+               ${
+                 hoursDifference >= 48 
+                   ? '<p>Your credit has been refunded.</p>' 
+                   : ''
+               }
                <p>Thank you!</p>
                <p>Best regards,<br>Zealfc Team</p>`,
-        text: `Hello ${user.first_name},\n\nYou have successfully canceled your registration for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}.\n\n${hoursDifference >= 48 ? 'Your credit has been refunded.\n\n' : ''}Thank you!\n\nBest regards,\nZealfc Team`,
       });
-
-      // Notify users in the waitlist
-      if (game.waitlist && game.waitlist.length > 0) {
-        await Promise.all(
-          game.waitlist.map(async (waitlistUser) => {
-            await sendEmail({
-              to: { email: waitlistUser.email, name: `${waitlistUser.first_name} ${waitlistUser.last_name}` },
-              subject: 'Spot Available for Game',
-              html: `<p>Hello ${waitlistUser.first_name},</p><p>A spot has opened up for the game at <strong>${game.stadium.name}</strong> on <strong>${game.date.toLocaleDateString()} at ${game.time}</strong>.</p><p>Sign up quickly if you wish to join!</p><p>Best regards,<br>Zealfc Team</p>`,
-              text: `Hello ${waitlistUser.first_name},\n\nA spot has opened up for the game at ${game.stadium.name} on ${game.date.toLocaleDateString()} at ${game.time}.\n\nSign up quickly if you wish to join!\n\nBest regards,\nZealfc Team`,
-            });
-          })
-        );
-      }
 
       res.status(200).json({ message: 'Successfully canceled signup for the game.' });
     } catch (error) {
@@ -311,6 +363,8 @@ exports.cancelSignupForGame = [
     }
   },
 ];
+
+
 
     // Update game status
     exports.updateGameStatus = [

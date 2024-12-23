@@ -218,62 +218,94 @@ async function handleCheckoutSessionCompleted(event) {
 
 
 
-  // Handle Invoice Payment Succeeded
-  async function handleInvoicePaymentSucceeded(event) {
-    const invoice = event.data.object;
+async function handleInvoicePaymentSucceeded(event) {
+  const invoice = event.data.object;
 
-    try {
-      const subscriptionId = invoice.subscription;
-      if (!subscriptionId) return;
+  try {
+    const subscriptionId = invoice.subscription;
+    if (!subscriptionId) return;
 
-      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-      if (!subscription) return;
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    if (!subscription) return;
 
-      const customer = await stripe.customers.retrieve(subscription.customer);
-      if (!customer) return;
+    const customer = await stripe.customers.retrieve(subscription.customer);
+    if (!customer) return;
 
-      const userId = customer.metadata.userId;
-      const user = await User.findById(userId);
-      if (!user) return;
+    const userId = customer.metadata.userId;
+    const user = await User.findById(userId);
+    if (!user) return;
 
-      if (subscription.current_period_end) {
-        user.subscription.current_period_end = new Date(subscription.current_period_end * 1000);
+    // Update subscription current_period_end if available
+    if (subscription.current_period_end) {
+      const newEndDate = new Date(subscription.current_period_end * 1000);
+      // Update if different
+      if (!user.subscription.current_period_end || user.subscription.current_period_end.getTime() !== newEndDate.getTime()) {
+        user.subscription.current_period_end = newEndDate;
+        user.markModified('subscription');
       }
-
-      // Add credits based on subscription.type
-      let creditsToAdd = 0;
-      switch (user.subscription.type) {
-        case 'Basic':
-          creditsToAdd = 5;
-          break;
-        case 'Premium':
-          creditsToAdd = 10;
-          break;
-        case 'Mate':
-          creditsToAdd = 20;
-          break;
-        default:
-          creditsToAdd = 0; 
-      }
-
-      user.credits = (typeof user.credits === 'number' ? user.credits : 0) + creditsToAdd;
-      user.lastModified = new Date();
-      await user.save()
-      console.log(`User ${user.email} subscription renewed successfully.`);
-
-      // Send subscription renewal email
-      await sendEmail({
-        to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
-        subject: 'Subscription Renewed',
-        html: `<p>Hello ${user.first_name},</p><p>Your subscription has been successfully renewed. Your next billing date is <strong>${new Date(subscription.current_period_end * 1000).toLocaleDateString()}</strong>.</p><p>Thank you for being with us!</p>`,
-        text: `Hello ${user.first_name},\n\nYour subscription has been successfully renewed. Your next billing date is ${new Date(subscription.current_period_end * 1000).toLocaleDateString()}.\n\nThank you for being with us!`,
-      });
     }
-   catch (error) {
+
+    // Determine creditsToAdd based on subscription type
+    let creditsToAdd = 0;
+    switch (user.subscription.type) {
+      case 'Basic':
+        creditsToAdd = 5;
+        break;
+      case 'Premium':
+        creditsToAdd = 10;
+        break;
+      case 'Mate':
+        creditsToAdd = 20;
+        break;
+      default:
+        creditsToAdd = 0;
+    }
+
+    // Add a new credit entry
+    const newCreditEntry = {
+      amount: creditsToAdd,
+      type: 'subscription',
+      expires_at: new Date(subscription.current_period_end * 1000)
+    };
+
+    // Ensure user.credits is an array
+    if (!Array.isArray(user.credits)) {
+      user.credits = [];
+      user.markModified('credits');
+    }
+
+    const oldCreditsLength = user.credits.length;
+    user.credits.push(newCreditEntry);
+
+    // Reassign the array to ensure Mongoose sees a change
+    // (Sometimes push alone can be tricky if Mongoose doesn't detect it)
+    user.credits = [...user.credits]; 
+    user.markModified('credits'); // Explicitly mark credits as modified
+
+    // Also update another field to ensure a change is detected
+    user.lastModified = new Date();
+
+    await user.save(); // This will apply the changes via $set internally
+
+    console.log(`User ${user.email} subscription renewed successfully.`);
+
+    // Send subscription renewal email
+    await sendEmail({
+      to: { email: user.email, name: `${user.first_name} ${user.last_name}` },
+      subject: 'Subscription Renewed',
+      html: `<p>Hello ${user.first_name},</p>
+             <p>Your subscription has been successfully renewed. Your next billing date is
+             <strong>${new Date(subscription.current_period_end * 1000).toLocaleDateString()}</strong>.</p>
+             <p>Thank you for being with us!</p>`,
+      text: `Hello ${user.first_name},\n\nYour subscription has been successfully renewed. Your next billing date is ${new Date(subscription.current_period_end * 1000).toLocaleDateString()}.\n\nThank you for being with us!`
+    });
+
+  } catch (error) {
     console.error('Error handling invoice payment succeeded:', error);
   }
 }
 
+  
 // Handle Subscription Deleted
 async function handleSubscriptionDeleted(event) {
   const subscription = event.data.object;
